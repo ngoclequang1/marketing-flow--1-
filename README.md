@@ -44,7 +44,7 @@ Tích hợp Google Sheets:
 
 Tự động xuất kết quả phân tích MVP sang một Google Sheet được chỉ định.
 
-Công nghệ sửdụng
+Công nghệ sử dụng
 
 Backend:
 
@@ -109,6 +109,31 @@ Thư viện playwright cần tải về các trình duyệt.
 playwright install
 
 
+Cài đặt FFmpeg (Bắt buộc cho video):
+Hệ thống này yêu cầu ffmpeg và ffprobe để xử lý mọi tác vụ video (tạo phụ đề, lật video, trộn âm thanh).
+
+Trên Windows:
+
+Truy cập ffmpeg.org/download.html và tải về bản build cho Windows (thường được khuyên dùng là từ gyan.dev).
+
+Tải bản "essentials" build (ví dụ: ffmpeg-7.0.1-essentials_build.zip).
+
+Giải nén file zip vào một thư mục cố định (ví dụ: E:\tools\ffmpeg\).
+
+Đường dẫn bạn cần sẽ trỏ vào thư mục bin bên trong, ví dụ: E:\tools\ffmpeg\bin\ffmpeg.exe và E:\tools\ffmpeg\bin\ffprobe.exe.
+
+Trên macOS (sử dụng Homebrew):
+
+brew install ffmpeg
+
+
+Trên Linux (sử dụng apt):
+
+sudo apt update && sudo apt install ffmpeg
+
+
+Nếu bạn cài đặt trên macOS hoặc Linux, ffmpeg thường sẽ tự động được thêm vào PATH hệ thống, bạn có thể không cần cấu hình FFMPEG_BIN trong bước tiếp theo.
+
 Cấu hình Môi trường (.env):
 Tạo một file tên là .env trong thư mục backend và điền các giá trị:
 
@@ -120,7 +145,7 @@ GEMINI_API_KEY="AIza..."
 GOOGLE_APPLICATION_CREDENTIALS="duong/dan/den/file-credentials.json"
 
 # Đường dẫn tuyệt đối đến file ffmpeg.exe và ffprobe.exe
-# (Rất quan trọng cho việc xử lý video)
+# (Rất quan trọng cho việc xử lý video, đặc biệt trên Windows)
 FFMPEG_BIN="E:\tools\ffmpeg\bin\ffmpeg.exe"
 FFPROBE_BIN="E:\tools\ffmpeg\bin\ffprobe.exe"
 
