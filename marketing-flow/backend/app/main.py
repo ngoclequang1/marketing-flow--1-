@@ -5,7 +5,7 @@ import os
 import shutil
 from pathlib import Path
 from uuid import uuid4
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 # 1. Imports
 from fastapi import (
@@ -15,9 +15,14 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 # --- IMPORT CHỨC NĂNG TỪ MEDIA ---
-from .media import auto_subtitle_and_bgm, flip_video_horizontal
+from .media import (
+    auto_subtitle_and_bgm, 
+    remix_video_by_scenes,
+    SceneSegment  # Import Pydantic model từ media.py
+)
 
 # 2. Correctly import all routers
 from app.routers import analyze, keywords, export, mvp, video
@@ -51,31 +56,20 @@ def run_video_job(
     It updates the JOB_STATUS dictionary when it's done.
     """
     try:
-        video_to_process = temp_video_path
-        
-        # --- NEW: Run flip logic first ---
-        if flip_video:
-            flipped_path = str(temp_workdir / "flipped.mp4")
-            try:
-                # Call the new function from media.py
-                flip_video_horizontal(temp_video_path, flipped_path)
-                # Use the flipped video for the next step
-                video_to_process = flipped_path
-            except Exception as e:
-                # If flip fails, stop the job
-                JOB_STATUS[job_id] = {"status": "failed", "error": f"Failed to flip video: {e}"}
-                shutil.rmtree(temp_workdir)
-                return  # Stop execution
-        
-        # --- Run subtitle/BGM logic on the (possibly) flipped video ---
+        # --- Run subtitle/BGM/flip logic all at once ---
         final_path_str = auto_subtitle_and_bgm(
-            video_path=video_to_process, # <-- Use the correct video path
+            video_path=temp_video_path,
             output_path=final_output_path,
             bgm_path=bgm_path,
             language=language,
             burn_in=burn_in,
+            flip_video=flip_video  # <-- Pass flip param
         )
+        
         # Job succeeded: update status with the final path
+        if not final_path_str or not Path(final_path_str).exists():
+             raise RuntimeError("Processing finished but output file was not found.")
+             
         JOB_STATUS[job_id] = {"status": "complete", "path": final_path_str}
     
     except Exception as e:
@@ -86,6 +80,34 @@ def run_video_job(
         # Clean up the temporary upload directory
         if temp_workdir.exists():
             shutil.rmtree(temp_workdir)
+
+
+# ---- 5. NEW: Helper function for REMIX jobs ----
+def run_remix_job(
+    job_id: str,
+    original_video_path: str,
+    scenes_to_keep: List[SceneSegment],
+    final_output_path: str
+):
+    """
+    Runs the remix (cut + concat) job in the background.
+    """
+    try:
+        final_path_str = remix_video_by_scenes(
+            input_path=original_video_path,
+            output_path=final_output_path,
+            scenes_to_keep=scenes_to_keep # Sửa tên tham số ở đây
+        )
+        
+        if not final_path_str or not Path(final_path_str).exists():
+             raise RuntimeError("Remix finished but output file was not found.")
+        
+        JOB_STATUS[job_id] = {"status": "complete", "path": final_path_str}
+        
+    except Exception as e:
+        JOB_STATUS[job_id] = {"status": "failed", "error": f"Remix failed: {e}"}
+    
+    # We do NOT clean up the original video, as it's not temporary
 
 
 # ---- CORS (Correct) ----
@@ -109,8 +131,10 @@ MEDIA_ROOT = os.getenv("MEDIA_ROOT", "media")
 # Create subdirectories for clarity
 TEMP_DIR = Path(MEDIA_ROOT) / "temp_uploads"
 EXPORTS_DIR = Path(MEDIA_ROOT) / "exports"
+VIDEO_DIR = Path(MEDIA_ROOT) / "videos" # <-- THÊM DÒNG NÀY
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+VIDEO_DIR.mkdir(parents=True, exist_ok=True) # <-- THÊM DÒNG NÀY
 
 app.mount("/media", StaticFiles(directory=MEDIA_ROOT), name="media")
 
@@ -140,7 +164,7 @@ def debug_ffmpeg():
         return {"ok": False, "bin": exe, "err": str(e)}
 
 
-# ---- 5. MODIFIED Auto-subtitle endpoint ----
+# ---- MODIFIED Auto-subtitle endpoint ----
 @app.post("/process", tags=["Video"])
 async def process_video(
     background_tasks: BackgroundTasks,
@@ -148,7 +172,7 @@ async def process_video(
     bgm: Optional[UploadFile] = File(None),
     burn_in: bool = Form(True),
     language: Optional[str] = Form(None),
-    flip: bool = Form(False, description="Flip video horizontally") # <-- ADDED FLIP PARAM
+    flip: bool = Form(False, description="Flip video horizontally")
 ):
     """
     Starts a background job to process the video.
@@ -175,7 +199,7 @@ async def process_video(
                 with bgm_path.open("wb") as f:
                     await run_in_threadpool(shutil.copyfileobj, bgm.file, f)
             finally:
-                await bgm.close() # Close the BGM file too
+                await bgm.close()
             bgm_path_str = str(bgm_path)
     
     except Exception as e:
@@ -187,7 +211,8 @@ async def process_video(
         stem += "_flipped"
     
     out_name = f"{stem}_{job_id}.mp4" if burn_in else f"{stem}_{job_id}.mkv"
-    out_path = EXPORTS_DIR / out_name
+    # *** LƯU Ý: Vẫn lưu vào EXPORTS, không phải VIDEOS. VIDEOS là nơi lưu file GỐC. ***
+    out_path = EXPORTS_DIR / out_name 
 
     # Set initial job status
     JOB_STATUS[job_id] = {"status": "processing"}
@@ -201,15 +226,63 @@ async def process_video(
         bgm_path_str,
         language,
         burn_in,
-        workdir,  # Pass the temp dir for cleanup
-        flip      # <-- Pass flip param to the job
+        workdir,
+        flip
     )
 
     # --- Return IMMEDIATELY ---
     return {"status": "processing", "job_id": job_id}
 
 
-# ---- 6. NEW Endpoint to check job status (FIXED) ----
+# ---- NEW Pydantic model for Remix endpoint ----
+class RemixRequest(BaseModel):
+    video_path: str  # Server-side path (e.g., "media/videos/abc.mp4")
+    scenes: List[SceneSegment]
+
+
+# ---- NEW Remix endpoint (MODIFIED) ----
+@app.post("/remix", tags=["Video"])
+async def remix_video_endpoint(
+    request: RemixRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Starts a background job to remix a video based on selected scenes.
+    Returns a Job ID immediately.
+    """
+    job_id = str(uuid4())
+    
+    # Resolve the full, absolute path on the server
+    # Giả định video_path gửi lên là 'media/videos/abc.mp4'
+    original_video_path = Path.cwd() / request.video_path
+    
+    if not original_video_path.exists():
+        # Thử một đường dẫn tuyệt đối (fallback)
+        original_video_path = Path(request.video_path)
+        if not original_video_path.exists():
+             raise HTTPException(status_code=404, detail=f"Original video not found at: {request.video_path}")
+
+    # --- FIX: Lưu file remix vào VIDEO_DIR ---
+    out_name = f"{original_video_path.stem}_remix_{job_id}.mp4"
+    out_path = VIDEO_DIR / out_name # <-- ĐÃ THAY ĐỔI
+
+    # Set initial job status
+    JOB_STATUS[job_id] = {"status": "processing"}
+
+    # --- Add the REMIX task to the background ---
+    background_tasks.add_task(
+        run_remix_job,
+        job_id,
+        str(original_video_path),
+        request.scenes, # Sửa tên tham số
+        str(out_path)
+    )
+
+    # --- Return IMMEDIATELY ---
+    return {"status": "processing", "job_id": job_id}
+
+
+# ---- Endpoint to check job status (MODIFIED) ----
 @app.get("/process/status/{job_id}", tags=["Video"])
 def get_job_status(job_id: str):
     """
@@ -221,20 +294,20 @@ def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found.")
     
     if status["status"] == "complete":
-        # --- FIX: Check if path exists before using it ---
         path = status.get("path")
-        if not path:
-            # If status is "complete" but path is None, the job failed.
+        if not path or not Path(path).exists():
             status["status"] = "failed"
-            status["error"] = "Job reported complete but output path was missing."
-            JOB_STATUS[job_id] = status # Update the global status
-            return status # Return the new failed status
+            status["error"] = "Job reported complete but output file was missing."
+            JOB_STATUS[job_id] = status 
+            return status
             
-        # Convert the file path to a public URL for download
         public_url = _to_public_url(path)
         
-        # (We no longer pop the job, so the user can refresh and get the link again)
-        
-        return {"status": "complete", "download_url": public_url}
+        # --- FIX: Trả về cả server_path ---
+        return {
+            "status": "complete", 
+            "download_url": public_url,
+            "server_path": path  # <-- Đã thêm
+        }
         
     return status

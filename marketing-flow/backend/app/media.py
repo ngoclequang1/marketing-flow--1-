@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, List, Tuple
 from tqdm import tqdm
+from pydantic import BaseModel # <-- ĐÃ THÊM
 
 # ---------- FFmpeg / ffprobe resolvers ----------
 def get_ffmpeg_bin() -> str:
@@ -33,6 +34,14 @@ def ensure_ffmpeg_on_path():
             os.environ["PATH"] = ff_dir + os.pathsep + os.environ.get("PATH", "")
     except Exception:
         pass
+
+
+# --- Cấu trúc dữ liệu cho Scene (ĐÃ THÊM) ---
+# (Class này được dùng bởi hàm remix_video_by_scenes)
+class SceneSegment(BaseModel):
+    start_sec: float
+    end_sec: float
+    duration_sec: float
 
 
 # ---------- SRT / ASS helpers ----------
@@ -70,7 +79,7 @@ def write_ass(
     margin_h: int = 60,
     # ASS colors are &HAABBGGRR (AA = alpha). Yellow text, black outline, translucent black box.
     primary="&H00FFFF00&",      # yellow
-    outlinecol="&H00000000&",   # black
+    outlinecol="&H00000000&",  # black
     backcol="&H60000000&",      # box ~62% opaque black
     outline: int = 1,
 ):
@@ -214,6 +223,10 @@ def transcribe_to_srt(
     except Exception:
         model = WhisperModel(model_size, device="cpu", compute_type=compute_type)
 
+    # --- SỬA LỖI LOGIC: ---
+    # Toàn bộ logic xử lý (preprocess, transcribe, regroup)
+    # PHẢI nằm TRONG khối `with tempfile.TemporaryDirectory()`
+    # để file `clean_wav` không bị xóa quá sớm.
     with tempfile.TemporaryDirectory() as _tmp:
         clean_wav = str(Path(_tmp) / "clean.wav")
         preprocess_audio(video_path, clean_wav)
@@ -233,9 +246,10 @@ def transcribe_to_srt(
             initial_prompt="Tiếng Việt có dấu, đọc số liệu chính xác, không thêm từ thừa."
         )
 
-    segs = regroup_segments_by_words(segments_gen, max_chars=36, max_dur=2.8)
-    write_srt(segs, srt_path)   # keep an SRT for debugging/soft-sub
-    return segs
+        segs = regroup_segments_by_words(segments_gen, max_chars=36, max_dur=2.8)
+        write_srt(segs, srt_path)  # keep an SRT for debugging/soft-sub
+        return segs
+    # --- KẾT THÚC SỬA LỖI ---
 
 
 def safe_quote(path: str) -> str:
@@ -366,7 +380,8 @@ def auto_subtitle_and_bgm(
     duck_ratio: float = 12.0,
     duck_attack_ms: int = 5,
     duck_release_ms: int = 250,
-    remove_original_audio: bool = False,   # ✅ new flag
+    remove_original_audio: bool = False,
+    flip_video: bool = False # <-- ĐÃ THÊM THAM SỐ LẬT VIDEO
 ) -> str:
     """Generate subtitles and optionally mix or replace background music."""
     ensure_ffmpeg_on_path()
@@ -452,7 +467,6 @@ def auto_subtitle_and_bgm(
 
         # --- AUDIO LOGIC ---
         if remove_original_audio:
-            # ✅ Replace all audio with new BGM only
             if used_bgm:
                 bgm_chain = "[1:a]aformat=channel_layouts=stereo,aresample=48000"
                 if vid_dur and bgm_is_looped:
@@ -470,7 +484,6 @@ def auto_subtitle_and_bgm(
             else:
                 out_audio_label = None  # no bgm = silent
         else:
-            # ✅ Mix mode (keep voice, duck BGM)
             if used_bgm and v_has_audio:
                 voice_chain = "[0:a]aformat=channel_layouts=stereo,aresample=48000,volume=1[voice]"
                 bgm_chain = "[1:a]aformat=channel_layouts=stereo,aresample=48000"
@@ -497,17 +510,26 @@ def auto_subtitle_and_bgm(
             else:
                 out_audio_label = None
 
-        # --- Apply subtitles + finalize output ---
+        # --- Apply subtitles + finalize output (ĐÃ SỬA) ---
         if burn_in:
-            vf = f"subtitles='{safe_quote(ass_path)}'"
+            # Xây dựng chuỗi video filter
+            video_filters = []
+            if flip_video:
+                video_filters.append("hflip")
+            
+            # Thêm phụ đề SAU KHI lật
+            video_filters.append(f"subtitles='{safe_quote(ass_path)}'")
+            
+            vf = ",".join(video_filters) # -> "hflip,subtitles=..."
+
             if filter_complex_parts:
                 cmd += ["-filter_complex", ";".join(filter_complex_parts)]
                 cmd += ["-map", "0:v:0"]
                 if out_audio_label:
                     cmd += ["-map", out_audio_label]
-                cmd += ["-vf", vf]
+                cmd += ["-vf", vf] # Dùng chuỗi filter đã gộp
             else:
-                cmd += ["-vf", vf, "-map", "0:v:0"]
+                cmd += ["-vf", vf, "-map", "0:v:0"] # Dùng chuỗi filter đã gộp
                 if out_audio_label:
                     cmd += ["-map", out_audio_label]
 
@@ -520,34 +542,44 @@ def auto_subtitle_and_bgm(
                 output_path
             ]
         else:
+            # Logic cho soft subs (ít dùng hơn, nhưng cũng sửa)
             if not output_path.lower().endswith(".mkv"):
                 output_path = str(Path(output_path).with_suffix(".mkv"))
             cmd += ["-i", srt_path]
             srt_index = 2 if used_bgm else 1
+            
+            video_filters = []
+            if flip_video:
+                video_filters.append("hflip")
 
             if filter_complex_parts:
                 cmd += ["-filter_complex", ";".join(filter_complex_parts)]
-                cmd += ["-map", "0:v:0"]
-                if out_audio_label:
-                    cmd += ["-map", out_audio_label, "-c:a", "aac", "-b:a", "192k"]
-                else:
-                    cmd += ["-an"]
-                cmd += [
-                    "-map", f"{srt_index}:0", "-c:s", "srt", "-c:v", "copy", "-shortest", output_path
-                ]
+            
+            cmd += ["-map", "0:v:0"]
+            if out_audio_label:
+                cmd += ["-map", out_audio_label, "-c:a", "aac", "-b:a", "192k"]
             else:
-                cmd += ["-map", "0:v:0"]
-                if out_audio_label:
-                    cmd += ["-map", out_audio_label, "-c:a", "aac", "-b:a", "192k"]
-                else:
-                    cmd += ["-an"]
-                cmd += [
-                    "-map", f"{srt_index}:0", "-c:s", "srt", "-c:v", "copy", "-shortest", output_path
-                ]
+                cmd += ["-an"]
+            
+            if video_filters:
+                 cmd += ["-vf", ",".join(video_filters)]
+
+            cmd += [
+                "-map", f"{srt_index}:0", "-c:s", "srt", 
+                "-c:v", "copy" if not flip_video else "libx264", # Phải encode lại nếu lật
+                "-shortest", output_path
+            ]
 
         run_ffmpeg(cmd)
+        
+        # Thêm kiểm tra file an toàn
+        if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
+             raise RuntimeError("FFmpeg command finished but output file is missing or empty.")
+
         return output_path
-# --- Thêm hàm lật video mới ---
+
+
+# --- Hàm lật video (Giữ nguyên) ---
 
 def flip_video_horizontal(
     input_path: str,
@@ -574,3 +606,71 @@ def flip_video_horizontal(
     
     run_ffmpeg(cmd)
     return output_path
+
+
+
+
+# --- HÀM MỚI: REMIX VIDEO ---
+# (Thêm hàm này vào cuối file)
+
+def remix_video_by_scenes(
+    input_path: str,
+    output_path: str,
+    scenes_to_keep: List[SceneSegment],
+    crf: int = 22,
+    preset: str = "fast"
+) -> str:
+    """
+    Tự động cắt và nối lại video dựa trên danh sách các SceneSegment.
+    Sử dụng FFmpeg filter_complex 'concat' để nối cả video và audio.
+    """
+    if not scenes_to_keep:
+        raise ValueError("Danh sách cảnh (scenes_to_keep) không được rỗng.")
+
+    filter_parts = []
+    stream_labels = []
+    
+    # 1. Tạo các phân đoạn trim (cắt) cho từng cảnh
+    for i, scene in enumerate(scenes_to_keep):
+        start = scene.start_sec
+        end = scene.end_sec
+        
+        video_trim = f"[0:v]trim={start}:{end},setpts=PTS-STARTPTS[v{i}]"
+        audio_trim = f"[0:a]atrim={start}:{end},asetpts=PTS-STARTPTS[a{i}]"
+        
+        filter_parts.append(video_trim)
+        filter_parts.append(audio_trim)
+        stream_labels.append(f"[v{i}][a{i}]")
+
+    # 2. Tạo lệnh concat (nối)
+    num_scenes = len(scenes_to_keep)
+    concat_filter = f"{''.join(stream_labels)}concat=n={num_scenes}:v=1:a=1[outv][outa]"
+    filter_parts.append(concat_filter)
+
+    # 3. Xây dựng lệnh FFmpeg hoàn chỉnh
+    full_filter_complex = ";".join(filter_parts)
+    
+    cmd = [
+        get_ffmpeg_bin(), 
+        "-y",
+        "-i", str(input_path),
+        "-filter_complex", full_filter_complex,
+        "-map", "[outv]",
+        "-map", "[outa]",
+        "-c:v", "libx264",
+        "-crf", str(crf),
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        str(output_path)
+    ]
+    
+    run_ffmpeg(cmd)
+    
+    if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
+         raise RuntimeError("FFmpeg remix command finished but output file is missing or empty.")
+
+    return str(output_path)
+    

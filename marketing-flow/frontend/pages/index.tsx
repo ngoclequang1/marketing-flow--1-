@@ -33,17 +33,16 @@ type ContentDeliverables = {
 type ViralAnalyzeResp = {
   ok: boolean;
   source_url: string;
-  video_path: string;
+  video_path: string; // Đây là server path, ví dụ: 'media/videos/abc.mp4'
   audio_path: string;
   video_url?: string | null;
   audio_url?: string | null;
-  audio_format: string; // "mp3" | "wav"
+  audio_format: string;
   scenes: SceneSegment[];
   stats: Record<string, number>;
   content_deliverables?: ContentDeliverables;
 };
 
-// ---- Deliverables CSV type (kept; not displayed in UI anymore) ----
 type DeliverableRow = {
   Platform: string;
   AssetType: string;
@@ -77,11 +76,10 @@ export default function Home() {
         body: JSON.stringify({ url, keyword }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) {
-        setError(data.error || "Request failed");
-      } else {
-        setResult(data);
+      if (!res.ok || data.error || data.draft_error_note) {
+        setError(data.error || data.draft_error_note || "Request failed");
       }
+      setResult(data); // Vẫn set result ngay cả khi có draft_error_note
     } catch (e: any) {
       setError(e?.message || "Network error");
     } finally {
@@ -92,22 +90,30 @@ export default function Home() {
   // ===== Viral analyze state =====
   const [ttUrl, setTtUrl] = useState("");
   const [audioExt, setAudioExt] = useState<".mp3" | ".wav">(".mp3");
-  const [sceneSensitivity, setSceneSensitivity] = useState(0.45); // 0.1..0.9
+  const [sceneSensitivity, setSceneSensitivity] = useState(0.45);
   const [minGapFrames, setMinGapFrames] = useState(10);
   const [vaLoading, setVaLoading] = useState(false);
   const [vaError, setVaError] = useState<string | null>(null);
   const [vaData, setVaData] = useState<ViralAnalyzeResp | null>(null);
 
-  // ===== NEW: Auto Subtitle + BGM state =====
+  // ===== Auto Subtitle + BGM state =====
   const [vidFile, setVidFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [burnIn, setBurnIn] = useState(true);
-  const [langHint, setLangHint] = useState<string>(""); // blank = auto
-  const [flipVideo, setFlipVideo] = useState(false); // <-- 1. ADDED STATE FOR FLIP
+  const [langHint, setLangHint] = useState<string>("");
+  const [flipVideo, setFlipVideo] = useState(false);
   const [procLoading, setProcLoading] = useState(false);
   const [procError, setProcError] = useState<string | null>(null);
   const [procBlobUrl, setProcBlobUrl] = useState<string | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  // ===== Remix state =====
+  const [remixLoading, setRemixLoading] = useState(false);
+  const [remixError, setRemixError] = useState<string | null>(null);
+  const [remixBlobUrl, setRemixBlobUrl] = useState<string | null>(null);
+  const [remixJobId, setRemixJobId] = useState<string | null>(null);
+  const [selectedSceneIndices, setSelectedSceneIndices] = useState<Set<number>>(new Set());
+  const [remixServerPath, setRemixServerPath] = useState<string | null>(null);
 
   // ---- Helpers ----
   function fmtTime(t: number) {
@@ -121,45 +127,53 @@ export default function Home() {
   function toPublicMediaUrl(absPath?: string | null) {
     if (!absPath) return null;
     const norm = absPath.replace(/\\/g, "/");
+    
+    // Thử tìm /media/ đầu tiên (cách chuẩn)
     const i = norm.toLowerCase().lastIndexOf("/media/");
     if (i >= 0) return norm.slice(i);
-    const j = norm.toLowerCase().indexOf("/audio/");
+
+    // Fallback: tìm các thư mục con
+    const j = norm.toLowerCase().lastIndexOf("/audio/");
     if (j >= 0) return "/media" + norm.slice(j);
-    const k = norm.toLowerCase().indexOf("/videos/");
+    const k = norm.toLowerCase().lastIndexOf("/videos/");
     if (k >= 0) return "/media" + norm.slice(k);
+    const l = norm.toLowerCase().lastIndexOf("/exports/");
+    if (l >= 0) return "/media" + norm.slice(l);
+
+    // Fallback cho đường dẫn tuyệt đối (ví dụ: E:/.../media/...)
+    const lastMedia = norm.toLowerCase().lastIndexOf("media/");
+    if(lastMedia >= 0) {
+      // Trả về từ "media/"
+      return "/" + norm.slice(lastMedia);
+    }
     return null;
   }
 
-  // ... (All other helper functions: cleanForCaption, composeCaptionText, etc. remain the same) ...
-  // ===== Captions FROM MVP (no hashtags, no source links) =====
   function cleanForCaption(s: string) {
     if (!s) return "";
     return s
-      .replace(/https?:\/\/\S+/gi, "")      // remove URLs
-      .replace(/(^|\s)#[\p{L}\w_]+/giu, "") // remove hashtags
-      .replace(/[•\-–]{1,}\s*/g, "")        // strip bullet glyphs
-      .replace(/\s+/g, " ")                // collapse whitespace
+      .replace(/https?:\/\/\S+/gi, "")
+      .replace(/(^|\s)#[\p{L}\w_]+/giu, "")
+      .replace(/[•\-–]{1,}\s*/g, "")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
   function composeCaptionText(mvp: MVPResult | null) {
     if (!mvp) return "Tóm tắt ngắn nội dung video.";
     const title = cleanForCaption(mvp.fields?.title || mvp.keyword || "");
-
     const raw =
       mvp.draft ||
       mvp.insights?.formula ||
       mvp.fields?.text ||
       (Array.isArray(mvp.fields?.h1) ? mvp.fields.h1.join(". ") : "") ||
       (Array.isArray(mvp.fields?.h2) ? mvp.fields.h2.join(". ") : "");
-
     const summary = cleanForCaption(raw || "");
     const joined = [title, summary].filter(Boolean).join(" — ").trim();
     return joined || title || "Tóm tắt ngắn nội dung video.";
   }
 
   function makeCaptionsFromMVP(mvp: MVPResult | null): PlatformCaptions {
-    // Always short version for captions
     const baseShort = shortenDraft(composeCaptionText(mvp), 220, 2);
     return {
       facebook: baseShort,
@@ -169,12 +183,10 @@ export default function Home() {
     };
   }
 
-  // --- Short draft helpers ---
   function shortenDraft(s: string, charLimit = 480, minSentences = 2) {
     if (!s) return "";
     const normalized = s.replace(/\s+/g, " ").trim();
     if (normalized.length <= charLimit) return normalized;
-
     const parts = normalized.split(/(?<=[.!?])\s+/);
     let out = "";
     for (let i = 0; i < parts.length; i++) {
@@ -202,6 +214,12 @@ export default function Home() {
   async function runViralAnalyze() {
     setVaError(null);
     setVaData(null);
+    setRemixError(null);
+    setRemixBlobUrl(null);
+    setRemixJobId(null);
+    setSelectedSceneIndices(new Set());
+    setRemixServerPath(null);
+    
     if (!ttUrl.trim()) {
       setVaError("Please paste a TikTok video URL.");
       return;
@@ -231,57 +249,18 @@ export default function Home() {
     navigator.clipboard?.writeText(text);
   }
 
-  // Prefer server-provided URLs; fall back to deriving them.
   const audioUrl = vaData?.audio_url ?? toPublicMediaUrl(vaData?.audio_path) ?? undefined;
   const videoUrl = vaData?.video_url ?? toPublicMediaUrl(vaData?.video_path) ?? undefined;
 
-  // ... (deliverableRows and downloadDeliverablesCSV functions remain the same) ...
   const deliverableRows: DeliverableRow[] = useMemo(() => {
     if (!vaData) return [];
-    const cap = shortenDraft(composeCaptionText(result), 220, 2); // short, clean
+    const cap = shortenDraft(composeCaptionText(result), 220, 2);
     const ctaDefault = "Bạn thấy phần nào hữu ích nhất? Bình luận để mình làm phần 2!";
-
     return [
-      {
-        Platform: "YouTube Shorts",
-        AssetType: "Video Reup (cut)",
-        AssetLink: vaData.source_url || "",
-        Caption: cap,
-        CTA_Comment: ctaDefault,
-        Status: "Todo",
-        Owner: "",
-        DueDate: "",
-      },
-      {
-        Platform: "TikTok",
-        AssetType: "Video Reup (cut + music + subtitle)",
-        AssetLink: vaData.source_url || "",
-        Caption: cap,
-        CTA_Comment: "Bạn muốn mình đào sâu phần nào tiếp theo?",
-        Status: "Todo",
-        Owner: "",
-        DueDate: "",
-      },
-      {
-        Platform: "Instagram",
-        AssetType: "Image Carousel",
-        AssetLink: "(upload planned)",
-        Caption: cap,
-        CTA_Comment: "👉 Lưu lại để xem sau và chia sẻ với bạn bè!",
-        Status: "Todo",
-        Owner: "",
-        DueDate: "",
-      },
-      {
-        Platform: "Facebook Page",
-        AssetType: "Caption-only",
-        AssetLink: vaData.source_url || "",
-        Caption: cap,
-        CTA_Comment: "Bạn đồng ý/không đồng ý điểm nào? Bình luận nhé!",
-        Status: "Todo",
-        Owner: "",
-        DueDate: "",
-      },
+      { Platform: "YouTube Shorts", AssetType: "Video Reup (cut)", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: ctaDefault, Status: "Todo", Owner: "", DueDate: "" },
+      { Platform: "TikTok", AssetType: "Video Reup (cut + music + subtitle)", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: "Bạn muốn mình đào sâu phần nào tiếp theo?", Status: "Todo", Owner: "", DueDate: "" },
+      { Platform: "Instagram", AssetType: "Image Carousel", AssetLink: "(upload planned)", Caption: cap, CTA_Comment: "👉 Lưu lại để xem sau và chia sẻ với bạn bè!", Status: "Todo", Owner: "", DueDate: "" },
+      { Platform: "Facebook Page", AssetType: "Caption-only", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: "Bạn đồng ý/không đồng ý điểm nào? Bình luận nhé!", Status: "Todo", Owner: "", DueDate: "" },
     ];
   }, [vaData, result]);
 
@@ -292,16 +271,11 @@ export default function Home() {
       headers.join(","),
       ...deliverableRows.map((r) =>
         headers
-          .map((h) =>
-            String(r[h] ?? "")
-              .replace(/"/g, '""')
-              .replace(/\n/g, "\\n")
-          )
+          .map((h) => String(r[h] ?? "").replace(/"/g, '""').replace(/\n/g, "\\n"))
           .map((cell) => `"${cell}"`)
           .join(",")
       ),
     ].join("\n");
-
     const blob = new Blob([lines], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -313,7 +287,6 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  // ===== NEW: call /process for Auto Subtitle + BGM (POLLING) =====
   async function handleProcess() {
     if (!vidFile) {
         setProcError("Select a video first.");
@@ -322,72 +295,151 @@ export default function Home() {
     setProcLoading(true);
     setProcError(null);
     setProcBlobUrl(null);
-    setCurrentJobId(null); // Clear previous job
+    setCurrentJobId(null);
 
     const fd = new FormData();
     fd.append("video", vidFile);
     if (bgmFile) fd.append("bgm", bgmFile);
     fd.append("burn_in", String(burnIn));
-    fd.append("flip", String(flipVideo)); // <-- 2. ADDED FLIP TO FORM DATA
+    fd.append("flip", String(flipVideo));
     if (langHint) fd.append("language", langHint);
 
-    // This is a reference to the polling interval
     let intervalId: any = null;
 
     try {
-        // 1. Start the job
         const startResp = await fetch(`${API}/process`, { method: "POST", body: fd });
         const startData = await startResp.json();
-
         if (!startResp.ok || startData.status !== "processing") {
             throw new Error(startData.error || "Failed to start job.");
         }
-
         const { job_id } = startData;
         setCurrentJobId(job_id);
 
-        // 2. Poll for the result
         intervalId = setInterval(async () => {
             try {
                 const statusResp = await fetch(`${API}/process/status/${job_id}`);
-                // Handle cases where status check itself fails
                 if (!statusResp.ok) {
-                   // Stop polling if the job ID is gone or server errors
                    if (statusResp.status === 404) {
                        throw new Error("Job not found. Please try again.");
                    }
                    throw new Error("Failed to get job status from server.");
                 }
-                
                 const statusData = await statusResp.json();
-
                 if (statusData.status === "complete") {
-                    clearInterval(intervalId); // Stop polling
+                    clearInterval(intervalId);
                     setProcLoading(false);
                     setCurrentJobId(null);
-                    // We get a URL, not a blob!
                     setProcBlobUrl(`${API}${statusData.download_url}`); 
                 } else if (statusData.status === "failed") {
-                    clearInterval(intervalId); // Stop polling
+                    clearInterval(intervalId);
                     setProcLoading(false);
                     setCurrentJobId(null);
                     setProcError(statusData.error || "Job failed.");
                 }
-                // If status is still "processing", do nothing and let it poll again
             } catch (pollError: any) {
                 clearInterval(intervalId);
                 setProcLoading(false);
                 setCurrentJobId(null);
                 setProcError(pollError?.message || "Failed to get job status.");
             }
-        }, 5000); // Poll every 5 seconds
+        }, 5000); 
 
     } catch (e: any) {
-        if (intervalId) clearInterval(intervalId); // Clear interval on initial start failure
+        if (intervalId) clearInterval(intervalId);
         setProcLoading(false);
         setProcError(e?.message || "Processing error");
     }
-    // Note: 'finally' is removed because loading is now handled by the polling logic
+  }
+
+  function handleSceneToggle(sceneIndex: number) {
+    setSelectedSceneIndices(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(sceneIndex)) {
+        newSet.delete(sceneIndex);
+      } else {
+        newSet.add(sceneIndex);
+      }
+      return newSet;
+    });
+  }
+
+  async function handleRemix() {
+    if (!vaData) {
+      setRemixError("Please run the TikTok Video Analyzer first.");
+      return;
+    }
+    
+    const scenes_to_keep = vaData.scenes.filter((_, index) => selectedSceneIndices.has(index));
+    
+    if (scenes_to_keep.length === 0) {
+      setRemixError("No scenes were selected. Please check the boxes in the 'Scene Durations' table.");
+      return;
+    }
+    
+    setRemixLoading(true);
+    setRemixError(null);
+    setRemixBlobUrl(null);
+    setRemixJobId(null);
+    setRemixServerPath(null);
+
+    const payload = {
+      video_path: vaData.video_path,
+      scenes: scenes_to_keep
+    };
+
+    let intervalId: any = null;
+
+    try {
+      const startResp = await fetch(`${API}/remix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      const startData = await startResp.json();
+      if (!startResp.ok || startData.status !== "processing") {
+          throw new Error(startData.error || "Failed to start remix job.");
+      }
+
+      const { job_id } = startData;
+      setRemixJobId(job_id);
+
+      intervalId = setInterval(async () => {
+          try {
+              const statusResp = await fetch(`${API}/process/status/${job_id}`);
+              if (!statusResp.ok) {
+                 if (statusResp.status === 404) {
+                     throw new Error("Remix job not found. Please try again.");
+                 }
+                 throw new Error("Failed to get remix job status.");
+              }
+              
+              const statusData = await statusResp.json();
+              if (statusData.status === "complete") {
+                  clearInterval(intervalId);
+                  setRemixLoading(false);
+                  setRemixJobId(null);
+                  setRemixBlobUrl(`${API}${statusData.download_url}`);
+                  setRemixServerPath(statusData.server_path); 
+              } else if (statusData.status === "failed") {
+                  clearInterval(intervalId);
+                  setRemixLoading(false);
+                  setRemixJobId(null);
+                  setRemixError(statusData.error || "Remix job failed.");
+              }
+          } catch (pollError: any) {
+              clearInterval(intervalId);
+              setRemixLoading(false);
+              setRemixJobId(null);
+              setRemixError(pollError?.message || "Failed to get job status.");
+          }
+      }, 5000);
+
+    } catch (e: any) {
+        if (intervalId) clearInterval(intervalId);
+        setRemixLoading(false);
+        setRemixError(e?.message || "Remix error");
+    }
   }
 
   return (
@@ -423,10 +475,8 @@ export default function Home() {
         </div>
         {error && <div className="pill error">Error: {error}</div>}
         {result && (
-          // ... (MVP result rendering is unchanged) ...
           <div className="resultGrid">
             {result?.fields?.title && <div className="pill"><b>Page Title</b>: {result.fields.title}</div>}
-
             <div className="resultCol">
               <h3>Insights (from URL)</h3>
               <h4>Strengths</h4>
@@ -440,7 +490,6 @@ export default function Home() {
               <h4>SEO Suggestions</h4>
               <pre className="pre">{JSON.stringify(result.insights?.seo || {}, null, 2)}</pre>
             </div>
-
             <div className="resultCol resultDraft">
               <div className="compactTrends">
                 <div className="flexBetween" style={{ marginBottom: 8 }}>
@@ -506,7 +555,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* ===== TikTok Video Analyze Panel (No Changes) ===== */}
+      {/* ===== TikTok Video Analyze Panel ===== */}
       <section className="card" style={{ marginTop: 24 }}>
         <h2>TikTok Video Analyzer</h2>
         <div className="grid2">
@@ -556,7 +605,6 @@ export default function Home() {
         </div>
         {vaError && <div className="pill error">Error: {vaError}</div>}
         {vaData && (
-           // ... (TikTok result rendering is unchanged) ...
           <div className="resultGrid">
             <div className="pill"><b>Scenes</b>: {vaData.stats?.count ?? 0}</div>
             <div className="pill"><b>Mean</b>: {fmtTime(vaData.stats?.mean || 0)}</div>
@@ -595,6 +643,8 @@ export default function Home() {
               <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Server file:</div>
               <code className="pre" style={{ display: "block", whiteSpace: "pre-wrap" }}>{vaData.video_path}</code>
             </div>
+
+            {/* --- BẢNG SCENES (ĐÃ SỬA) --- */}
             <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
               <div className="flexBetween">
                 <h3>Scene Durations</h3>
@@ -603,17 +653,26 @@ export default function Home() {
               <div className="tableWrap">
                 <table className="table">
                   <thead>
-                    <tr>
+                    <tr>{/* XÓA KHOẢNG TRẮNG THỪA */}
+                      <th title="Select for Remix">Remix?</th>
                       <th>#</th>
                       <th>Start</th>
                       <th>End</th>
                       <th>Duration</th>
                       <th />
-                    </tr>
+                    </tr>{/* XÓA KHOẢNG TRẮNG THỪA */}
                   </thead>
                   <tbody>
                     {vaData.scenes.map((s, i) => (
-                      <tr key={i}>
+                      <tr key={i} className={selectedSceneIndices.has(i) ? "selected" : ""}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selectedSceneIndices.has(i)}
+                            onChange={() => handleSceneToggle(i)}
+                            title={`Select scene ${i+1} for remix`}
+                          />
+                        </td>
                         <td>{i + 1}</td>
                         <td className="mono">{fmtTime(s.start_sec)}</td>
                         <td className="mono">{fmtTime(s.end_sec)}</td>
@@ -637,6 +696,52 @@ export default function Home() {
                 <pre className="pre">{JSON.stringify(vaData, null, 2)}</pre>
               </details>
             </div>
+
+            {/* --- PHẦN REMIX (ĐÃ SỬA) --- */}
+            <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
+              <h3>Remix Video (Custom)</h3>
+              <p className="muted" style={{ marginBottom: 12 }}>
+                Select scenes from the "Scene Durations" table above, then click here to create a new video.
+              </p>
+              <button 
+                onClick={handleRemix} 
+                disabled={remixLoading || !vaData || selectedSceneIndices.size === 0}
+              >
+                {remixLoading 
+                  ? `Remixing... (Job: ${remixJobId?.slice(0, 8)}...)` 
+                  : `Remix ${selectedSceneIndices.size} Selected Scenes`}
+              </button>
+
+              {remixError && <div className="pill error" style={{marginTop: 12}}>Error: {remixError}</div>}
+              {remixLoading && !remixError && (
+                <div className="pill" style={{ marginTop: 12 }}>
+                  Remix job is processing...
+                </div>
+              )}
+
+              {remixBlobUrl && (
+                <div className="resultCol" style={{ marginTop: 16 }}>
+                  <h3>Remix Preview / Download</h3>
+                  <video controls src={remixBlobUrl} style={{ width: "100%", borderRadius: 12 }} />
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <a className="downloadBtn" href={remixBlobUrl} download>
+                      Download Remix
+                    </a>
+                    {/* --- 6. HIỂN THỊ SERVER PATH --- */}
+                    {remixServerPath && (
+                      <div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Server file:</div>
+                        <code className="pre" style={{ display: "block", whiteSpace: "pre-wrap", fontSize: '12px' }}>
+                          {remixServerPath}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* --- 3.1 Content Deliverables (remains the same) --- */}
             {vaData.content_deliverables && (
               <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
                 <h3>3.1 Content — Carousel & Captions</h3>
@@ -702,7 +807,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* ===== NEW: Auto Subtitle + BGM (MODIFIED) ===== */}
+      {/* ===== Auto Subtitle + BGM Panel (No Changes) ===== */}
       <section className="card" style={{ marginTop: 24 }}>
         <h2>Auto Subtitle + Optional BGM</h2>
         <div className="grid2">
@@ -725,8 +830,6 @@ export default function Home() {
             <label>Language hint (blank = auto)</label>
             <input value={langHint} onChange={(e) => setLangHint(e.target.value)} placeholder='e.g., "vi" or "en"' />
           </div>
-
-          {/* --- 3. ADDED FLIP CHECKBOX --- */}
           <div>
             <label>Flip Video?</label>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -738,27 +841,21 @@ export default function Home() {
               <span className="muted">{flipVideo ? "Yes (Flipped)" : "No (Original)"}</span>
             </div>
           </div>
-          
           <div className="right">
             <button onClick={handleProcess} disabled={!vidFile || procLoading}>
-              {procLoading ? `Processing... (Job: ${currentJobId?.slice(0, 8)}...
-              )` : "Generate"}
+              {procLoading ? `Processing... (Job: ${currentJobId?.slice(0, 8)}...)` : "Generate"}
             </button>
           </div>
         </div>
-
         {procError && <div className="pill error">Error: {procError}</div>}
-        
         {procLoading && !procError && (
           <div className="pill" style={{ marginTop: 16 }}>
             Processing job... This may take several minutes for long videos.
           </div>
         )}
-
         {procBlobUrl && (
           <div className="resultCol" style={{ marginTop: 16 }}>
             <h3>Preview / Download</h3>
-            {/* When using polling, procBlobUrl is now a direct URL, not a blob URL */}
             <video controls src={procBlobUrl} style={{ width: "100%", borderRadius: 12 }} />
             <div style={{ marginTop: 8 }}>
               <a className="downloadBtn" href={procBlobUrl} download>
@@ -769,7 +866,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* --- 4. MODIFIED CSS --- */}
+      {/* --- 7. SỬA LẠI CSS --- */}
       <style jsx>{`
         .container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
         .header h1 { margin: 0; font-size: 28px; }
@@ -779,10 +876,7 @@ export default function Home() {
         textarea.draft { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; }
         button { padding: 10px 14px; border: none; border-radius: 10px; background: #111827; color: #fff; cursor: pointer; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-        
-        /* This is more flexible for 4 or 5 items */
         .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: end; }
-        
         .right { text-align: right; grid-column: 1 / -1; }
         .resultGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
         .resultCol { border: 1px solid #f1f5f9; border-radius: 14px; padding: 12px; background: #fafafa; }
@@ -811,9 +905,7 @@ export default function Home() {
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
         .thumbLink img { transition: transform .12s ease; }
         .thumbLink:hover img { transform: scale(1.01); }
-
-        /* Compact trend pills */
-        .compactTrends { background: #fff; border: 1px solid #eef2f7; border-radius: 10px; padding: 10px; }
+        .compactTrends { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; }
         .pillRow { display: flex; flex-wrap: wrap; gap: 6px; }
         .chip {
           display: inline-flex;
@@ -824,6 +916,20 @@ export default function Home() {
           border: 1px solid #e5e7eb;
           border-radius: 9999px;
           font-size: 13px;
+        }
+        
+        /* --- CSS CHO HÀNG ĐƯỢC CHỌN --- */
+        .table tbody tr:hover { background: #f9fafb; }
+        .table tbody tr.selected { background: #eef2ff; }
+        
+        .table th:first-child, .table td:first-child {
+          width: 60px;
+          text-align: center;
+        }
+        .table td:first-child input {
+          width: 16px; /* Không để checkbox chiếm toàn bộ */
+          height: 16px;
+          cursor: pointer;
         }
 
         @media (max-width: 900px){
