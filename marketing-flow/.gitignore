@@ -1,0 +1,93 @@
+===================================================================
+
+Python / FastAPI Backend (.venv, pycache, .env)
+
+===================================================================
+
+Môi trường ảo
+
+.venv/
+venv/
+env/
+
+File chứa API keys và bí mật (RẤT QUAN TRỌNG)
+
+.env
+*.env
+
+Cache của Python
+
+pycache/
+*.pyc
+*.pyo
+*.pyd
+
+IDE (VSCode, PyCharm)
+
+.vscode/
+.idea/
+
+===================================================================
+
+Node.js / React Frontend (node_modules, .next, .env.local)
+
+===================================================================
+
+Thư mục thư viện
+
+node_modules/
+
+File build của Next.js / React
+
+.next/
+build/
+dist/
+
+File môi trường (RẤT QUAN TRỌNG)
+
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+Logs
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+===================================================================
+
+Media (Video/Audio/Exports do người dùng tạo) (QUAN TRỌNG)
+
+===================================================================
+
+Bỏ qua tất cả các file trong thư mục media
+
+(bao gồm temp_uploads, exports, videos, audio, thumbnails)
+
+media/
+
+Bỏ qua các file export excel/csv
+
+exports/
+*.xlsx
+*.csv
+
+===================================================================
+
+Hệ điều hành (OS)
+
+===================================================================
+
+macOS
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+Windows
+
+Thumbs.db
+ehthumbs.db
+desktop.ini

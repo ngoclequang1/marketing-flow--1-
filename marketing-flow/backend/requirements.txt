@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+requests
+beautifulsoup4
+google-genai>=0.6.0
+pytrends
+gspread
+google-auth
+pandas
+python-multipart>=0.0.9
