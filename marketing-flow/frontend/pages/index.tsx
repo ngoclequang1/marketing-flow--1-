@@ -9,31 +9,32 @@ type MVPResult = {
   insights: any;
   trends: Trends;
   draft: string;
+  // Thêm các trường lỗi tùy chọn
+  draft_error_note?: string;
+  sheet_export_error?: string;
 };
 
 // ---- Viral analyze types ----
 type SceneSegment = { start_sec: number; end_sec: number; duration_sec: number };
 
-// NEW: platform + content deliverables types
+// (Các type PlatformCaptions, ContentDeliverables, ViralAnalyzeResp... giữ nguyên)
 type PlatformCaptions = {
   facebook: string;
   instagram: string;
   tiktok: string;
   youtube_shorts: string;
 };
-
 type ContentDeliverables = {
   video_stub_path: string;
-  carousel_images: string[];        // /media/thumbnails/...
-  captions?: PlatformCaptions;        // backend captions (we’ll ignore)
+  carousel_images: string[];
+  captions?: PlatformCaptions;
   cta_comments?: string[];
-  carousel_zip_url?: string | null;   // optional zip from backend
+  carousel_zip_url?: string | null;
 };
-
 type ViralAnalyzeResp = {
   ok: boolean;
   source_url: string;
-  video_path: string; // Đây là server path, ví dụ: 'media/videos/abc.mp4'
+  video_path: string;
   audio_path: string;
   video_url?: string | null;
   audio_url?: string | null;
@@ -42,7 +43,6 @@ type ViralAnalyzeResp = {
   stats: Record<string, number>;
   content_deliverables?: ContentDeliverables;
 };
-
 type DeliverableRow = {
   Platform: string;
   AssetType: string;
@@ -54,8 +54,10 @@ type DeliverableRow = {
   DueDate: string;
 };
 
+// (declare var process: any; giữ nguyên)
+declare var process: any;
+
 export default function Home() {
-  // Hardcoded API URL to avoid 'process is not defined' error in browser
   const API = "http://localhost:8080";
 
   // ===== MVP state =====
@@ -65,6 +67,7 @@ export default function Home() {
   const [result, setResult] = useState<MVPResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // --- SỬA LỖI HÀM NÀY ---
   async function runMVP() {
     setLoading(true);
     setError(null);
@@ -75,11 +78,15 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, keyword }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error || data.draft_error_note) {
-        setError(data.error || data.draft_error_note || "Request failed");
+      const data: MVPResult = await res.json();
+      
+      // Kiểm tra tất cả các lỗi có thể xảy ra
+      if (!res.ok || data.error || data.draft_error_note || data.sheet_export_error) {
+        const errorMsg = data.error || data.draft_error_note || data.sheet_export_error || "Request failed";
+        setError(errorMsg);
       }
-      setResult(data); // Vẫn set result ngay cả khi có draft_error_note
+      // Luôn set result để hiển thị draft (ngay cả khi sheet export lỗi)
+      setResult(data);
     } catch (e: any) {
       setError(e?.message || "Network error");
     } finally {
@@ -87,6 +94,7 @@ export default function Home() {
     }
   }
 
+  // (Các state và hàm còn lại: vaData, procLoading, fmtTime, v.v... giữ nguyên)
   // ===== Viral analyze state =====
   const [ttUrl, setTtUrl] = useState("");
   const [audioExt, setAudioExt] = useState<".mp3" | ".wav">(".mp3");
@@ -128,11 +136,8 @@ export default function Home() {
     if (!absPath) return null;
     const norm = absPath.replace(/\\/g, "/");
     
-    // Thử tìm /media/ đầu tiên (cách chuẩn)
     const i = norm.toLowerCase().lastIndexOf("/media/");
     if (i >= 0) return norm.slice(i);
-
-    // Fallback: tìm các thư mục con
     const j = norm.toLowerCase().lastIndexOf("/audio/");
     if (j >= 0) return "/media" + norm.slice(j);
     const k = norm.toLowerCase().lastIndexOf("/videos/");
@@ -140,10 +145,8 @@ export default function Home() {
     const l = norm.toLowerCase().lastIndexOf("/exports/");
     if (l >= 0) return "/media" + norm.slice(l);
 
-    // Fallback cho đường dẫn tuyệt đối (ví dụ: E:/.../media/...)
     const lastMedia = norm.toLowerCase().lastIndexOf("media/");
     if(lastMedia >= 0) {
-      // Trả về từ "media/"
       return "/" + norm.slice(lastMedia);
     }
     return null;
@@ -246,7 +249,19 @@ export default function Home() {
   }
 
   function copy(text: string) {
-    navigator.clipboard?.writeText(text);
+    // navigator.clipboard?.writeText(text); // Có thể bị block
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) {
+      console.error("Failed to copy", e);
+    }
   }
 
   const audioUrl = vaData?.audio_url ?? toPublicMediaUrl(vaData?.audio_path) ?? undefined;
@@ -260,6 +275,7 @@ export default function Home() {
       { Platform: "YouTube Shorts", AssetType: "Video Reup (cut)", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: ctaDefault, Status: "Todo", Owner: "", DueDate: "" },
       { Platform: "TikTok", AssetType: "Video Reup (cut + music + subtitle)", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: "Bạn muốn mình đào sâu phần nào tiếp theo?", Status: "Todo", Owner: "", DueDate: "" },
       { Platform: "Instagram", AssetType: "Image Carousel", AssetLink: "(upload planned)", Caption: cap, CTA_Comment: "👉 Lưu lại để xem sau và chia sẻ với bạn bè!", Status: "Todo", Owner: "", DueDate: "" },
+      // --- SỬA LỖI Ở ĐÂY: Xóa chữ 'F' và dấu hai chấm thừa ---
       { Platform: "Facebook Page", AssetType: "Caption-only", AssetLink: vaData.source_url || "", Caption: cap, CTA_Comment: "Bạn đồng ý/không đồng ý điểm nào? Bình luận nhé!", Status: "Todo", Owner: "", DueDate: "" },
     ];
   }, [vaData, result]);
@@ -473,7 +489,17 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* --- SỬA LỖI: HIỂN THỊ LỖI --- */}
         {error && <div className="pill error">Error: {error}</div>}
+        
+        {/* --- SỬA LỖI: HIỂN THỊ LỖI SHEET (NẾU CÓ) --- */}
+        {result?.sheet_export_error && (
+            <div className="pill error" style={{marginTop: "10px"}}>
+                Sheet Error: {result.sheet_export_error}
+            </div>
+        )}
+
         {result && (
           <div className="resultGrid">
             {result?.fields?.title && <div className="pill"><b>Page Title</b>: {result.fields.title}</div>}
@@ -644,7 +670,6 @@ export default function Home() {
               <code className="pre" style={{ display: "block", whiteSpace: "pre-wrap" }}>{vaData.video_path}</code>
             </div>
 
-            {/* --- BẢNG SCENES (ĐÃ SỬA) --- */}
             <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
               <div className="flexBetween">
                 <h3>Scene Durations</h3>
@@ -697,7 +722,6 @@ export default function Home() {
               </details>
             </div>
 
-            {/* --- PHẦN REMIX (ĐÃ SỬA) --- */}
             <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
               <h3>Remix Video (Custom)</h3>
               <p className="muted" style={{ marginBottom: 12 }}>
@@ -727,7 +751,6 @@ export default function Home() {
                     <a className="downloadBtn" href={remixBlobUrl} download>
                       Download Remix
                     </a>
-                    {/* --- 6. HIỂN THỊ SERVER PATH --- */}
                     {remixServerPath && (
                       <div>
                         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Server file:</div>
@@ -741,7 +764,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* --- 3.1 Content Deliverables (remains the same) --- */}
             {vaData.content_deliverables && (
               <div className="resultCol" style={{ gridColumn: "1 / -1" }}>
                 <h3>3.1 Content — Carousel & Captions</h3>
@@ -866,7 +888,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* --- 7. SỬA LẠI CSS --- */}
+      {/* --- CSS (Đã sửa lỗi DOM nesting) --- */}
       <style jsx>{`
         .container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
         .header h1 { margin: 0; font-size: 28px; }
@@ -918,7 +940,6 @@ export default function Home() {
           font-size: 13px;
         }
         
-        /* --- CSS CHO HÀNG ĐƯỢC CHỌN --- */
         .table tbody tr:hover { background: #f9fafb; }
         .table tbody tr.selected { background: #eef2ff; }
         
@@ -927,7 +948,7 @@ export default function Home() {
           text-align: center;
         }
         .table td:first-child input {
-          width: 16px; /* Không để checkbox chiếm toàn bộ */
+          width: 16px;
           height: 16px;
           cursor: pointer;
         }

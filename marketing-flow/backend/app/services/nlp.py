@@ -2,20 +2,30 @@ import os, json, re
 from collections import Counter
 from typing import Dict, List, Optional
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+from google.generativeai import types
 from pydantic import BaseModel
 
-# --- Gemini client (uses GEMINI_API_KEY) ---
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash"  # fast, budget model for text tasks
-
+# --- Cấu hình Model ---
+MODEL = "gemini-1.5-flash-latest"
 SYSTEM = (
     "You are a concise marketing analyst. Given a webpage's extracted content, "
     "return a compact JSON with keys: strengths (3-5 bullets), weaknesses (3-5 bullets), "
     "formula (describe hook/structure/CTA if detectable), improvements (3-5 specific actions), "
     "seo (title_suggestion, 3-5 keywords). Keep answers short and actionable. "
     "Respond in Vietnamese when the content is Vietnamese."
+)
+
+# --- Cấu hình API Key ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("CẢNH BÁO (NLP Service): GEMINI_API_KEY chưa được set. Các hàm AI sẽ thất bại.")
+
+gemini_model = genai.GenerativeModel(
+    MODEL,
+    system_instruction=SYSTEM
 )
 
 # ---- Structured output schema (reliable JSON) ----
@@ -30,7 +40,7 @@ class Insights(BaseModel):
     improvements: List[str]
     seo: SEO
 
-# ---- Lightweight heuristics for offline/fallback mode ----
+# ---- Lightweight heuristics (Giữ nguyên) ----
 STOPWORDS = {
     "the","a","an","and","or","of","to","in","on","for","is","are","be","with","as","by","at","that",
     "this","it","from","we","you","our","your","their","they","i","he","she","was","were","will","can",
@@ -75,10 +85,14 @@ def _heuristic_insights(content: Dict) -> Dict:
         "seo": {"title_suggestion": (title[:45] + "…") if title and len(title) > 48 else (title or "Gợi ý tiêu đề tối ưu"),
                 "keywords": kws}
     }
+# --- HẾT HÀM HELPERS ---
 
-def analyze_competitor(content: Dict) -> Dict:
-    # Fallback mode if you set MFA_LLM_OFF=1
-    if os.getenv("MFA_LLM_OFF") == "1":
+
+def analyze_competitor(content: Dict) -> Dict: 
+    
+    # --- ĐÃ SỬA LỖI ---
+    # Thay 'genai.API_KEY' bằng biến 'GEMINI_API_KEY' mà chúng ta đã lưu
+    if os.getenv("MFA_LLM_OFF") == "1" or not GEMINI_API_KEY:
         return _heuristic_insights(content)
 
     user = f"""Title: {content.get('title','')}
@@ -90,20 +104,17 @@ Body:
 {content.get('text','')[:8000]}
 """
     try:
-        resp = client.models.generate_content(
-            model=MODEL,
+        resp = gemini_model.generate_content(
             contents=user,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM,
+            generation_config=types.GenerationConfig(
                 response_mime_type="application/json",
-                response_schema=Insights,  # enforce JSON shape
+                response_schema=Insights,
                 temperature=0.2,
             ),
         )
-        # If structured output parsed is available, use it; else parse text
-        return resp.parsed.model_dump() if hasattr(resp, "parsed") and resp.parsed else json.loads(resp.text)
+        return json.loads(resp.text)
+    
     except Exception as e:
-        # fall back gracefully on any SDK/API error
         data = _heuristic_insights(content)
         data["_note"] = f"Fallback used due to error: {e}"
         return data

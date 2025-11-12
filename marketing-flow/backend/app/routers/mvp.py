@@ -1,46 +1,50 @@
 import os
 from fastapi import APIRouter
 from pydantic import BaseModel, HttpUrl
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+from google.generativeai import types
 import json
-from app.services.crawl import smart_fields   # <-- platform-aware fetcher
+from typing import Optional, List
+
+# --- Import các service ---
+from app.services.crawl import smart_fields
 from app.services.nlp import analyze_competitor
 from app.services.trends import keyword_snapshot
-from app.services.sheets import export_rows   # <-- import Sheets service
+from app.services.sheets import export_rows
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter()
 
 MODEL = "gemini-2.5-flash"
 SPREADSHEET_ID = "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8"
-SHEET_TITLE = "Sheet1"
+SHEET_TITLE = "MVP_Content_Plan"
 
+# --- Cấu hình API Key ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("CẢNH BÁO (MVP Router): GEMINI_API_KEY chưa được set. Các hàm AI sẽ thất bại.")
 
-def _get_gemini_client():
-    """Create Gemini client only when needed to avoid import-time crashes."""
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not set")
-    return genai.Client(api_key=api_key)
-
+gemini_model = genai.GenerativeModel(
+    MODEL,
+    system_instruction="You write high-performing, user friendly, shortly marketing content in Vietnamese."
+)
 
 class MVPReq(BaseModel):
     url: HttpUrl
     keyword: str
-    platform: str = "page"  # "page" or "blog"
+    platform: str = "page"
     geo: str = "VN"
-
 
 def _fallback_draft(keyword: str, platform: str) -> str:
     if platform == "page":
         return (
-            f"[FALLBACK – không dùng LLM]\n"
             f"Hook: {keyword} đang HOT? Xem ngay!\n"
             f"Body: Điểm nổi bật • Lợi ích nhanh • Cam kết rõ ràng • Bằng chứng ngắn\n"
             f"CTA: Bình luận \"TÔI MUỐN\" để nhận ưu đãi."
         )
     return (
-        f"[FALLBACK – không dùng LLM]\n"
         f"Outline SEO cho từ khóa: {keyword}\n"
         f"H2 1. Tổng quan & lợi ích chính\n"
         f"H2 2. So sánh & lựa chọn phù hợp\n"
@@ -51,22 +55,26 @@ def _fallback_draft(keyword: str, platform: str) -> str:
 
 
 @router.post("/run")
-def mvp_run(req: MVPReq):
-    # 1) URL → crawl + insights (smart handling for TikTok/Facebook/normal pages)
-    fields = smart_fields(str(req.url))
-    insights = analyze_competitor(fields)  # Gemini (structured) or heuristic fallback
-
-    # 2) Keyword → trends
-    snap = keyword_snapshot(req.keyword, geo=req.geo)
+async def mvp_run(req: MVPReq):
+    
+    draft_error_note: Optional[str] = None
+    
+    fields = await run_in_threadpool(smart_fields, str(req.url))
+    insights = await run_in_threadpool(analyze_competitor, fields)
+    snap = await run_in_threadpool(keyword_snapshot, req.keyword, geo=req.geo)
 
     # 3) Draft (Gemini or fallback)
-    if os.getenv("MFA_LLM_OFF") == "1":
+    
+    # --- ĐÃ SỬA LỖI ---
+    # Thay 'genai.API_KEY' bằng biến 'GEMINI_API_KEY'
+    if os.getenv("MFA_LLM_OFF") == "1" or not GEMINI_API_KEY:
         draft = _fallback_draft(req.keyword, req.platform)
+        draft_error_note = "Tạo bản nháp AI đã bị tắt hoặc thiếu API key."
     else:
         template = (
-            "AIDA-style Facebook Page caption with hook, body, CTA"
+            "AIDA-style Facebook Page caption..."
             if req.platform == "page"
-            else "SEO blog outline with H2/H3, meta title (<=60 chars), meta description (<=155 chars)"
+            else "SEO blog outline with H2/H3..."
         )
         prompt = (
             f"Keyword: {req.keyword}\n"
@@ -75,18 +83,17 @@ def mvp_run(req: MVPReq):
             f"Write in Vietnamese. Keep it practical and high-converting."
         )
         try:
-            client = _get_gemini_client()
-            resp = client.models.generate_content(
-                model=MODEL,
+            generation_config = types.GenerationConfig(temperature=0.3)
+            
+            resp = await run_in_threadpool(
+                gemini_model.generate_content,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction="You write high-performing marketing content in Vietnamese.",
-                    temperature=0.3,
-                ),
+                generation_config=generation_config
             )
             draft = resp.text
         except Exception as e:
-            draft = _fallback_draft(req.keyword, req.platform) + f"\n\n(Note: Fallback due to error: {e})"
+            draft = _fallback_draft(req.keyword, req.platform)
+            draft_error_note = f"Không thể tạo bản nháp AI (lỗi: {e}). Đã sử dụng mẫu cơ bản."
 
     # 4) Build result
     result = {
@@ -96,30 +103,46 @@ def mvp_run(req: MVPReq):
         "insights": insights,
         "trends": snap,
         "draft": draft,
+        "draft_error_note": draft_error_note
     }
 
-      # 5) Auto-export to Google Sheet (safe serialization + normalization)
+    # 5) Auto-export to Google Sheet
     try:
-        # Serialize complex structures to single JSON strings
-        fields_str = json.dumps(result.get("fields", {}), ensure_ascii=False)
-        insights_str = json.dumps(result.get("insights", {}), ensure_ascii=False)
-        trends_str = json.dumps(result.get("trends", {}), ensure_ascii=False)
+        title_str = result.get("fields", {}).get("title", "")
+        strengths_str = "\n".join(result.get("insights", {}).get("strengths", []))
+        cap_fb = result.get("draft", "")
+        cap_ig = result.get("draft", "")
+        cap_tt = result.get("draft", "")
 
-        # Build the row exactly with no leading empty cells
-        row = [
+        header: List[str] = [
+            "Keyword", "Link Video Gốc", "Title (Nội dung chính)", "Điểm mạnh",
+            "Caption FB", "Caption IG", "Caption TikTok",
+            "Facebook", "Ready", "Error"
+        ]
+        checkboxes: List[str] = ["Facebook", "Ready", "Error"]
+        data_row: List[str] = [
             result.get("keyword", ""),
             result.get("source", ""),
-            fields_str,
-            insights_str,
-            trends_str,
-            result.get("draft", ""),
+            title_str,
+            strengths_str,
+            cap_fb,
+            cap_ig,
+            cap_tt,
+            "FALSE", "FALSE", "FALSE"
         ]
-
-        # Call export; export_rows will normalize/pad as needed
-        export_rows(SPREADSHEET_ID, SHEET_TITLE, [row])
+        
+        await export_rows(
+            spreadsheet_id=SPREADSHEET_ID,
+            title=SHEET_TITLE,
+            rows=[data_row],
+            header_row=header,
+            checkbox_columns=checkboxes
+        )
 
     except Exception as e:
-        # don't break the main response if export fails
-        result["sheet_export_error"] = str(e)
+        print(f"--- SHEET EXPORT ERROR ---")
+        print(str(e))
+        print("----------------------------")
+        result["sheet_export_error"] = f"Lỗi Google Sheet: {e}"
 
     return result
