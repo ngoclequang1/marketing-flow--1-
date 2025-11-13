@@ -2,6 +2,7 @@ import os
 import subprocess
 import tempfile
 import dropbox
+import gspread
 from pathlib import Path
 from typing import Optional, List, Tuple
 from tqdm import tqdm
@@ -368,6 +369,41 @@ def run_ffmpeg(cmd: list) -> None:
             f"FFmpeg failed (code {proc.returncode}).\nBIN: {cmd[0]}\nCMD: {' '.join(cmd)}\n\nSTDERR:\n{proc.stderr}"
         )
 
+# Load your service account JSON
+sheet_id = "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8"
+SERVICE_ACCOUNT_FILE = "C:\\Users\\tt\\Downloads\\ati-demo-472613-ab3aec4504a0.json"
+
+def append_dropbox_link_to_sheet(sheet_id: str, dropbox_link: str, column_name: str = "Dropbox link"):
+    """
+    Append Dropbox link to a Google Sheet row matching the video name.
+    """
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+    gc = gspread.authorize(creds)
+ # Open sheet
+    sh = gc.open_by_key(sheet_id)
+    worksheet = sh.sheet1  # or specify worksheet name
+
+    # Ensure header row exists
+    headers = worksheet.row_values(1)
+    if not headers:
+        worksheet.update_cell(1, 1, column_name)
+        headers = [column_name]
+
+    # Find or create Dropbox column
+    if column_name not in headers:
+        worksheet.update_cell(1, len(headers) + 1, column_name)
+        col_index = len(headers) + 1
+    else:
+        col_index = headers.index(column_name) + 1
+
+    # Find next empty row
+    next_row = len(worksheet.col_values(col_index)) + 1
+
+    # Append Dropbox link
+    worksheet.update_cell(next_row, col_index, dropbox_link)
+    print(f"✅ Added Dropbox link to sheet at row {next_row}, column '{column_name}'.")
+
 # Hardcode your Dropbox access token
 DROPBOX_ACCESS_TOKEN = "sl.u.AGEJK38Mnbk65i1BzvqzM1auruCAlt6M02EYnygdueSifCpYLVCiZFspl1hZeTmRR4RBtqO_yCQZFvzO0AeK3MnZxFsTB913xKTPRhtgax0Wu_Gq7l-wr1CVWf1uuOfW45jSmqA23iM4f_vcZzOv76cwEa1SeBr4w8QNpR0G9V4rM-zL5ej330ELxcSDB_c0P6WQrXd9dkblvtbUu9ePta1wOf4v3sLlvgjS69Pj6n42U3lOeRa7nN81-Zzoc0C7XcNgQcPk8sVGzc4Qm8vquu8b59VqaA5sM8pRN8hYbbJ_WfFZNyfWFhxFUSajY11pDHH-fqrARGpdbbQ3aC6cyB8WEKyWapAYy1UBX6ollws3fSklEC1JPgYLutkGoIEB44-oyzMIvjj997XYE-IR5mHM6ZJhXZdRqq-QDSAARTVdeEzZpLhAJGsqhSi3gbU6oJAX9dfL2R3NYpbAZyDijwuQO7hx7lt-czCwsYt06yZQ3Ry4KcMzcxHkPUYMmP_tuq3xqqloovexSYx_nEzDOtcC7V3Tf8hW1svMQg-WVj6K6AnVXCDpSfVcxmgpUpPEXo8Bv49YVitvSgAFSKAH4XF81ZGxTVWsZx4TgSy9OLjaxFLWD3TzCA6mY4r6n9SetVBeJQL-gDl4NNpvZlB4vkVO-q--uUQI3gP6BkyuOqfs65mrewZqeMPY-umxG7vU1mDg1LNWzC5a07t9DPjc8uBTp2J4XwrfyHPYvJWTbzfOwDqq51pjZ7Wh1NycaXkPqQPY3tDAGiNgXmmnYzj0Dvsc4U8e4u7qYlK7ioYsbyqkgVZFgou3LXa38PeoKg0y1PCb-v9HTI37fsJmcKT160gTvpKWsl2T0MAehNW38iTkgn63YC8-Z9f3gLfk1g8LN_BYAeSYVOePD7GCMMZYePYmLC9kCZoGHgACgN9m6hR7i729FkWkocmKu_KnfRUdpvhTSUdJ1F7rb14cpIfem7Je9zNP2ENpVlCAlNV7qStmdJugGDozRx9LvN7xMRsgV5W-_cBCJpZMAlLj7jIZfObgC4Awy9IgiNAIA697qQExs9nr0EIs-3HBlsdP3W4-WRK4lVlcxRRBHtTk1IdcdzcQDrY54eU_k0UyNBgC9ZcKPgfHD1fRVxjmdQQq1-m9LpoDXwUvrrEC8DdkYcrx5m2Kus8MrwxQmJ1B4fOQiPsiffX5Be4PynjpOo_0XhdIKo8Iv5mlnPwZdV96kitfK6rxNoLIrB2HTjH6p5fc2N6FefvNq49QAKmN3MQmlju6Bjmk5Z9963pNgEd40DBU5WFekRHmZrEA_iOz_sZVug7VIFgKUcGhuaaTLf9V6LKrN-hRXw9bRtzQXHnHE-gmmjymSrHr0EZOaR1UvOkupXTdUymsyEI1WfUsfWWAkPFphXyFiMgusSY2tMl_Ca5IK2J-"
 DROPBOX_UPLOAD_PATH = "/Videos"  # Path in your Dropbox where files will be uploaded
@@ -407,7 +443,7 @@ def auto_subtitle_and_bgm(
     duck_release_ms: int = 250,
     remove_original_audio: bool = False,
     flip_video: bool = False # <-- ĐÃ THÊM THAM SỐ LẬT VIDEO
-) -> dict:
+) -> str:
     """Generate subtitles and optionally mix or replace background music."""
     ensure_ffmpeg_on_path()
 
@@ -601,10 +637,13 @@ def auto_subtitle_and_bgm(
         if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
              raise RuntimeError("FFmpeg command finished but output file is missing or empty.")
 
-         # --- UPLOAD TO DROPBOX ---
         dropbox_url = upload_to_dropbox(output_path)
         print(f"Uploaded to Dropbox: {dropbox_url}")
 
+        # --- APPEND LINK TO GOOGLE SHEET ---
+        append_dropbox_link_to_sheet(sheet_id, dropbox_url)
+
+        # RETURN both Dropbox link and local path
         return output_path
 
 # --- Hàm lật video (Giữ nguyên) ---
@@ -636,6 +675,10 @@ def flip_video_horizontal(
     dropbox_url = upload_to_dropbox(output_path)
     print(f"Uploaded to Dropbox: {dropbox_url}")
 
+    # --- APPEND LINK TO GOOGLE SHEET ---
+    append_dropbox_link_to_sheet(sheet_id, dropbox_url)
+
+    # RETURN both Dropbox link and local path
     return output_path
 
 
