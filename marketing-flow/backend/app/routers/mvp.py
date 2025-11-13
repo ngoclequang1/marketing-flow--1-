@@ -117,9 +117,9 @@ async def mvp_run(req: MVPReq):
         header: List[str] = [
             "Keyword", "Link Video Gốc", "Title (Nội dung chính)", "Điểm mạnh",
             "Caption FB", "Caption IG", "Caption TikTok",
-            "Facebook", "Ready", "Error"
+            "Facebook", "IG", "Thread", "Ready", "Error"
         ]
-        checkboxes: List[str] = ["Facebook", "Ready", "Error"]
+        checkboxes: List[str] = ["Facebook", "IG", "Thread", "Ready", "Error"]
         data_row: List[str] = [
             result.get("keyword", ""),
             result.get("source", ""),
@@ -128,7 +128,7 @@ async def mvp_run(req: MVPReq):
             cap_fb,
             cap_ig,
             cap_tt,
-            "FALSE", "FALSE", "FALSE"
+            "FALSE", "FALSE", "FALSE", "FALSE", "FALSE"
         ]
         
         await export_rows(
