@@ -28,7 +28,7 @@ else:
 
 gemini_model = genai.GenerativeModel(
     MODEL,
-    system_instruction="You write high-performing, user friendly, shortly marketing content in Vietnamese."
+    system_instruction="Từ tiêu đề này tạo cho tôi một video description có độ dài 300 từ, dễ đọc chuẩn seo, 2 đến 3 dòng là viết 1 đoạn mới , mỗi đầu dòng có emoji gây chú ý , phong cách viết chuyên sâu giữ chân người và gợi ý cho tôi một số hastag để sử dụng cho video đấy"
 )
 
 class MVPReq(BaseModel):
