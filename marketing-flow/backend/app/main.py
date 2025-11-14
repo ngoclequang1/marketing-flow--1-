@@ -5,7 +5,9 @@ import os
 import shutil
 from pathlib import Path
 from uuid import uuid4
-from typing import Optional, Dict, List
+from typing import Optional, Dict
+from dotenv import load_dotenv
+load_dotenv()
 
 # 1. Imports
 from fastapi import (
@@ -15,32 +17,59 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+
+# --- THÊM: Imports cho Lifespan (Google Sheets) ---
+from contextlib import asynccontextmanager
+# Đảm bảo đường dẫn này đúng. Nếu file sheets.py của bạn ở app/services/sheets.py:
+from app.services.sheets import _get_async_client_manager
+# ---------------------------------------------------
 
 # --- IMPORT CHỨC NĂNG TỪ MEDIA ---
-from .media import (
-    auto_subtitle_and_bgm, 
-    remix_video_by_scenes,
-    SceneSegment  # Import Pydantic model từ media.py
-)
+# Giả sử file media.py nằm trong cùng thư mục app/
+from .media import auto_subtitle_and_bgm, flip_video_horizontal
 
 # 2. Correctly import all routers
 from app.routers import analyze, keywords, export, mvp, video
 # IMPORT THE HELPER FUNCTION FROM video.py
 from app.routers.video import _to_public_url
 
+# ---- 3. THÊM: Định nghĩa Lifespan cho Google Sheets ----
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Khởi động Server ---
+    print("Server đang khởi động...")
+    # Khởi tạo Google Sheet Client MỘT LẦN
+    print("Đang xác thực Google Sheet Client...")
+    try:
+        agcm = _get_async_client_manager()
+        gc = await agcm.authorize()
+        # Lưu client vào 'app.state' để các request có thể dùng
+        app.state.gc = gc 
+        print("Xác thực Google Sheet Client thành công.")
+    except Exception as e:
+        print(f"LỖI NGHIÊM TRỌNG: Không thể xác thực Google Sheet: {e}")
+        app.state.gc = None # Báo lỗi
+    
+    yield
+    
+    # --- Tắt Server ---
+    print("Server đang tắt.")
+# ------------------------------------------------------
+
+
+# 4. SỬA: Khởi tạo FastAPI với Lifespan
 app = FastAPI(
     title="Marketing Flow Automation",
     description="MVP: Analyze URL+Keyword combined (Gemini), plus individual endpoints",
     version="0.3.1",
+    lifespan=lifespan  # <-- Thêm Lifespan vào đây
 )
 
-# ---- 3. Job Status "Database" ----
-# (Simple in-memory dictionary)
+# ---- 5. Job Status "Database" ----
 JOB_STATUS: Dict[str, Dict] = {}
 
 
-# ---- 4. Helper function to run in the background (MODIFIED FOR FLIP) ----
+# ---- 6. Helper function (Code của bạn - Giữ nguyên) ----
 def run_video_job(
     job_id: str,
     temp_video_path: str,
@@ -49,96 +78,68 @@ def run_video_job(
     language: Optional[str],
     burn_in: bool,
     temp_workdir: Path,
-    flip_video: bool  # <-- ADDED FLIP PARAM
+    flip_video: bool
 ):
     """
     This is the heavy-lifting function that runs in the background.
     It updates the JOB_STATUS dictionary when it's done.
     """
     try:
-        # --- Run subtitle/BGM/flip logic all at once ---
+        video_to_process = temp_video_path
+        
+        if flip_video:
+            flipped_path = str(temp_workdir / "flipped.mp4")
+            try:
+                flip_video_horizontal(temp_video_path, flipped_path)
+                video_to_process = flipped_path
+            except Exception as e:
+                JOB_STATUS[job_id] = {"status": "failed", "error": f"Failed to flip video: {e}"}
+                shutil.rmtree(temp_workdir)
+                return
+        
         final_path_str = auto_subtitle_and_bgm(
-            video_path=temp_video_path,
+            video_path=video_to_process,
             output_path=final_output_path,
             bgm_path=bgm_path,
             language=language,
             burn_in=burn_in,
-            flip_video=flip_video  # <-- Pass flip param
         )
-        
-        # Job succeeded: update status with the final path
-        if not final_path_str or not Path(final_path_str).exists():
-             raise RuntimeError("Processing finished but output file was not found.")
-             
         JOB_STATUS[job_id] = {"status": "complete", "path": final_path_str}
     
     except Exception as e:
-        # Job failed: update status with the error
         JOB_STATUS[job_id] = {"status": "failed", "error": str(e)}
     
     finally:
-        # Clean up the temporary upload directory
         if temp_workdir.exists():
             shutil.rmtree(temp_workdir)
 
 
-# ---- 5. NEW: Helper function for REMIX jobs ----
-def run_remix_job(
-    job_id: str,
-    original_video_path: str,
-    scenes_to_keep: List[SceneSegment],
-    final_output_path: str
-):
-    """
-    Runs the remix (cut + concat) job in the background.
-    """
-    try:
-        final_path_str = remix_video_by_scenes(
-            input_path=original_video_path,
-            output_path=final_output_path,
-            scenes_to_keep=scenes_to_keep # Sửa tên tham số ở đây
-        )
-        
-        if not final_path_str or not Path(final_path_str).exists():
-             raise RuntimeError("Remix finished but output file was not found.")
-        
-        JOB_STATUS[job_id] = {"status": "complete", "path": final_path_str}
-        
-    except Exception as e:
-        JOB_STATUS[job_id] = {"status": "failed", "error": f"Remix failed: {e}"}
-    
-    # We do NOT clean up the original video, as it's not temporary
-
-
-# ---- CORS (Correct) ----
+# ---- CORS (Code của bạn - Giữ nguyên) ----
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000","http://localhost:8501"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---- Routers (Correct) ----
+# ---- Routers (Code của bạn - Giữ nguyên) ----
 app.include_router(analyze.router,  prefix="/analyze",  tags=["Analyze URL"])
 app.include_router(keywords.router, prefix="/keywords", tags=["Keyword Report"])
 app.include_router(export.router,   prefix="/export",   tags=["Export"])
 app.include_router(mvp.router,      prefix="/mvp",      tags=["MVP"])
 app.include_router(video.router, tags=["Video"])
 
-# ---- Static media (Correct) ----
+# ---- Static media (Code của bạn - Giữ nguyên) ----
 MEDIA_ROOT = os.getenv("MEDIA_ROOT", "media")
-# Create subdirectories for clarity
 TEMP_DIR = Path(MEDIA_ROOT) / "temp_uploads"
 EXPORTS_DIR = Path(MEDIA_ROOT) / "exports"
-VIDEO_DIR = Path(MEDIA_ROOT) / "videos" # <-- THÊM DÒNG NÀY
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-VIDEO_DIR.mkdir(parents=True, exist_ok=True) # <-- THÊM DÒNG NÀY
 
 app.mount("/media", StaticFiles(directory=MEDIA_ROOT), name="media")
 
-# ---- Health & debug (Correct) ----
+# ---- Health & debug (Code của bạn - Giữ nguyên) ----
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -164,7 +165,7 @@ def debug_ffmpeg():
         return {"ok": False, "bin": exe, "err": str(e)}
 
 
-# ---- MODIFIED Auto-subtitle endpoint ----
+# ---- Auto-subtitle endpoint (Code của bạn - Giữ nguyên) ----
 @app.post("/process", tags=["Video"])
 async def process_video(
     background_tasks: BackgroundTasks,
@@ -174,10 +175,6 @@ async def process_video(
     language: Optional[str] = Form(None),
     flip: bool = Form(False, description="Flip video horizontally")
 ):
-    """
-    Starts a background job to process the video.
-    Returns a Job ID immediately.
-    """
     job_id = str(uuid4())
     workdir = TEMP_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
@@ -186,7 +183,6 @@ async def process_video(
     bgm_path_str: Optional[str] = None
     
     try:
-        # --- Save files quickly ---
         try:
             with video_path.open("wb") as f:
                 await run_in_threadpool(shutil.copyfileobj, video.file, f)
@@ -205,19 +201,15 @@ async def process_video(
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "failed", "error": f"File save error: {e}"})
 
-    # Define the *final* output path (in the public exports dir)
     stem = video_path.stem
     if flip:
         stem += "_flipped"
     
     out_name = f"{stem}_{job_id}.mp4" if burn_in else f"{stem}_{job_id}.mkv"
-    # *** LƯU Ý: Vẫn lưu vào EXPORTS, không phải VIDEOS. VIDEOS là nơi lưu file GỐC. ***
-    out_path = EXPORTS_DIR / out_name 
+    out_path = EXPORTS_DIR / out_name
 
-    # Set initial job status
     JOB_STATUS[job_id] = {"status": "processing"}
 
-    # --- Add the HEAVY task to the background ---
     background_tasks.add_task(
         run_video_job,
         job_id,
@@ -230,64 +222,12 @@ async def process_video(
         flip
     )
 
-    # --- Return IMMEDIATELY ---
     return {"status": "processing", "job_id": job_id}
 
 
-# ---- NEW Pydantic model for Remix endpoint ----
-class RemixRequest(BaseModel):
-    video_path: str  # Server-side path (e.g., "media/videos/abc.mp4")
-    scenes: List[SceneSegment]
-
-
-# ---- NEW Remix endpoint (MODIFIED) ----
-@app.post("/remix", tags=["Video"])
-async def remix_video_endpoint(
-    request: RemixRequest,
-    background_tasks: BackgroundTasks
-):
-    """
-    Starts a background job to remix a video based on selected scenes.
-    Returns a Job ID immediately.
-    """
-    job_id = str(uuid4())
-    
-    # Resolve the full, absolute path on the server
-    # Giả định video_path gửi lên là 'media/videos/abc.mp4'
-    original_video_path = Path.cwd() / request.video_path
-    
-    if not original_video_path.exists():
-        # Thử một đường dẫn tuyệt đối (fallback)
-        original_video_path = Path(request.video_path)
-        if not original_video_path.exists():
-             raise HTTPException(status_code=404, detail=f"Original video not found at: {request.video_path}")
-
-    # --- FIX: Lưu file remix vào VIDEO_DIR ---
-    out_name = f"{original_video_path.stem}_remix_{job_id}.mp4"
-    out_path = VIDEO_DIR / out_name # <-- ĐÃ THAY ĐỔI
-
-    # Set initial job status
-    JOB_STATUS[job_id] = {"status": "processing"}
-
-    # --- Add the REMIX task to the background ---
-    background_tasks.add_task(
-        run_remix_job,
-        job_id,
-        str(original_video_path),
-        request.scenes, # Sửa tên tham số
-        str(out_path)
-    )
-
-    # --- Return IMMEDIATELY ---
-    return {"status": "processing", "job_id": job_id}
-
-
-# ---- Endpoint to check job status (MODIFIED) ----
+# ---- Endpoint to check job status (Code của bạn - Giữ nguyên) ----
 @app.get("/process/status/{job_id}", tags=["Video"])
 def get_job_status(job_id: str):
-    """
-    Client polls this endpoint to check if the job is done.
-    """
     status = JOB_STATUS.get(job_id)
     
     if not status:
@@ -295,19 +235,14 @@ def get_job_status(job_id: str):
     
     if status["status"] == "complete":
         path = status.get("path")
-        if not path or not Path(path).exists():
+        if not path:
             status["status"] = "failed"
-            status["error"] = "Job reported complete but output file was missing."
-            JOB_STATUS[job_id] = status 
+            status["error"] = "Job reported complete but output path was missing."
+            JOB_STATUS[job_id] = status
             return status
             
         public_url = _to_public_url(path)
         
-        # --- FIX: Trả về cả server_path ---
-        return {
-            "status": "complete", 
-            "download_url": public_url,
-            "server_path": path  # <-- Đã thêm
-        }
+        return {"status": "complete", "download_url": public_url}
         
     return status

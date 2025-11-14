@@ -7,7 +7,7 @@ from google.generativeai import types
 from pydantic import BaseModel
 
 # --- Cấu hình Model ---
-MODEL = "gemini-1.5-flash-latest"
+MODEL = "gemini-2.5-flash"
 SYSTEM = (
     "You are a concise marketing analyst. Given a webpage's extracted content, "
     "return a compact JSON with keys: strengths (3-5 bullets), weaknesses (3-5 bullets), "
@@ -118,3 +118,97 @@ Body:
         data = _heuristic_insights(content)
         data["_note"] = f"Fallback used due to error: {e}"
         return data
+    
+    # [THÊM VÀO CUỐI TỆP nlp.py]
+
+# --- Pydantic Models cho AI Segments ---
+class AISegment(BaseModel):
+    """Mô tả một phân đoạn video do AI chọn lọc"""
+    start_sec: float
+    end_sec: float
+    text: str
+    reason: str
+
+class AISegmentList(BaseModel):
+    """Danh sách các phân đoạn (dùng cho structured output của Gemini)"""
+    segments: List[AISegment]
+
+
+# --- Hàm 1: Sửa lỗi phụ đề (Proofreading) ---
+def correct_subtitles(raw_transcript: str) -> str:
+    """
+    Sử dụng Gemini để sửa lỗi chính tả và ngữ pháp cho bản ghi thô.
+    """
+    if os.getenv("MFA_LLM_OFF") == "1" or not GEMINI_API_KEY:
+        print("NLP: Tắt LLM, trả về bản ghi thô.")
+        return raw_transcript
+
+    # (Sử dụng 'gemini_model' đã được khởi tạo ở đầu tệp)
+    system = (
+        "You are a helpful assistant. Proofread this Vietnamese transcript. "
+        "Correct spelling, grammar, and punctuation. "
+        "NEVER change the timestamps (e.g., [0.123 --> 1.456]). "
+        "Return only the corrected transcript."
+    )
+    prompt = f"Transcript to correct:\n\n{raw_transcript}"
+
+    try:
+        # Cập nhật system instruction tạm thời cho tác vụ này
+        model_instance = genai.GenerativeModel(
+            MODEL,
+            system_instruction=system
+        )
+        resp = model_instance.generate_content(
+            contents=prompt,
+            generation_config=types.GenerationConfig(temperature=0.0)
+        )
+        return resp.text
+    except Exception as e:
+        print(f"LỖI (correct_subtitles): {e}")
+        return raw_transcript # Trả về bản thô nếu AI lỗi
+
+
+# --- Hàm 2: Tìm đoạn hay (Highlight Finding) ---
+def find_interesting_segments(corrected_transcript: str) -> List[AISegment]:
+    """
+    Sử dụng Gemini để phân tích bản ghi và chọn ra các đoạn "hay".
+    Sử dụng
+    """
+    if os.getenv("MFA_LLM_OFF") == "1" or not GEMINI_API_KEY:
+        print("NLP: Tắt LLM, trả về danh sách segment rỗng.")
+        return []
+
+    system = (
+        "You are a video editor. Read this transcript with timestamps "
+        "([start_sec --> end_sec]). Your job is to find 5-10 interesting "
+        "highlights (emotional, CTA, key insight, hook, or humor). "
+        "Return a JSON object matching the 'AISegmentList' schema."
+    )
+    prompt = f"Transcript to analyze:\n\n{corrected_transcript}"
+
+    try:
+        # (Sử dụng 'gemini_model' đã được khởi tạo ở đầu tệp)
+        # Lần này, chúng ta cần model instance hỗ trợ JSON
+        json_model_instance = genai.GenerativeModel(
+            MODEL,
+            system_instruction=system
+        )
+        resp = json_model_instance.generate_content(
+            contents=prompt,
+            generation_config=types.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=AISegmentList,
+                temperature=0.3
+            ),
+        )
+        
+        # Parse JSON và trả về danh sách các segment
+        data = json.loads(resp.text)
+        segment_list_data = data.get('segments', [])
+        
+        # Chuyển đổi list[dict] thành list[AISegment]
+        return [AISegment(**seg) for seg in segment_list_data]
+
+    except Exception as e:
+        print(f"LỖI (find_interesting_segments): {e}")
+        return []

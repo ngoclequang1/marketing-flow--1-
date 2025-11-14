@@ -13,6 +13,16 @@ import urllib.parse
 import shutil
 import re
 from typing import List, Optional, Dict, Any
+from pathlib import Path
+import json # <-- Import JSON
+
+# --- Thêm các imports cho Google Sheet ---
+from fastapi import Depends
+from gspread_asyncio import AsyncioGspreadClient
+from app.dependencies import get_sheet_client
+# [SỬA] Import thêm 2 hàm
+from app.services.sheets import export_rows, read_sheet_data, update_sheet_cell
+# ----------------------------------------
 
 # --- THIRD-PARTY ---
 import cv2
@@ -22,14 +32,25 @@ from yt_dlp import YoutubeDL
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, HttpUrl
 
+# [THÊM VÀO ĐẦU TỆP video.py]
+import tempfile
+from fastapi.concurrency import run_in_threadpool
+
+# --- IMPORTS TỪ PROJECT ---
+from app.media import transcribe_to_srt # <-- Import hàm transcribe
+from app.services import nlp           # <-- Import service nlp
+
 # --- PATHS / CONFIG ---
 MEDIA_ROOT = pathlib.Path(os.getenv("MEDIA_ROOT", "media")).resolve()
 VIDEO_DIR = MEDIA_ROOT / "videos"
 AUDIO_DIR = MEDIA_ROOT / "audio"
 THUMB_DIR = MEDIA_ROOT / "thumbnails"
 
-# Use env var for portability; if you prefer hard-code, replace with:
-# FFMPEG_BIN = r"D:\tools\ffmpeg\bin\ffmpeg.exe"
+# === Thêm SPREADSHEET_ID (giống tệp export.py) ===
+SPREADSHEET_ID = "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8"
+# =================================================
+
+# Use env var for portability
 FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
 
 for d in (VIDEO_DIR, AUDIO_DIR, THUMB_DIR):
@@ -53,7 +74,7 @@ class DownloadResp(BaseModel):
     saved_path: str
     bytes: int
     note: Optional[str] = None
-    saved_url: Optional[str] = None  # public URL (so frontend can load it)
+    saved_url: Optional[str] = None
 
 class SceneCut(BaseModel):
     frame_idx: int
@@ -81,8 +102,9 @@ class SceneSegment(BaseModel):
     start_sec: float
     end_sec: float
     duration_sec: float
+    text: str = ""
+    reason: str = ""
 
-# --- 3.1 Content deliverables models ---
 class PlatformCaptions(BaseModel):
     facebook: str
     instagram: str
@@ -90,12 +112,11 @@ class PlatformCaptions(BaseModel):
     youtube_shorts: str
 
 class ContentDeliverables(BaseModel):
-    # Artifacts created by backend (frontend will build captions from MVP)
-    video_stub_path: str                    # downloaded video path
-    carousel_images: List[str]              # public URLs of generated images
-    captions: Optional[PlatformCaptions] = None  # leave empty; frontend supplies real captions
+    video_stub_path: str
+    carousel_images: List[str]
+    captions: Optional[PlatformCaptions] = None
     cta_comments: Optional[List[str]] = None
-    carousel_zip_url: Optional[str] = None       # optional prebuilt zip (if you add later)
+    carousel_zip_url: Optional[str] = None
 
 class ViralAnalyzeResp(BaseModel):
     ok: bool
@@ -103,17 +124,18 @@ class ViralAnalyzeResp(BaseModel):
     video_path: str
     audio_path: str
     audio_format: str
-    scenes: List[SceneSegment]
-    stats: Dict[str, float]
+    all_segments: List[SceneSegment]
+    all_segments_stats: Dict[str, float]
+    ai_highlights: List[SceneSegment]
+    ai_highlights_stats: Dict[str, float]
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
-    content_deliverables: ContentDeliverables
+    content_deliverables: Optional[ContentDeliverables] = None
 
 # ---------- HELPERS ----------
 SAFE_CHARS = f"-_.() {string.ascii_letters}{string.digits}"
 
 def _to_public_url(local_path: str) -> Optional[str]:
-    """Map an absolute path inside MEDIA_ROOT to a /media/... URL for the client."""
     p = pathlib.Path(local_path)
     try:
         rel = p.resolve().relative_to(MEDIA_ROOT)
@@ -142,7 +164,6 @@ def _save_bytes_to_file(b: bytes, filename: str) -> str:
     return str(out)
 
 def _normalize_tiktok_url(url: str) -> str:
-    """Force a stable layout for TikTok; strip troublesome params and force English."""
     if "tiktok.com" in url and "lang=" not in url:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}lang=en"
@@ -150,7 +171,6 @@ def _normalize_tiktok_url(url: str) -> str:
     return url
 
 def _download_via_tiktok_proxy(url: str) -> Optional[bytes]:
-    """Try proxy first for TikTok."""
     stripped = url.replace("https://", "").replace("http://", "")
     try_urls = [
         f"{TIKTOK_PROXY}/{stripped}",
@@ -176,13 +196,10 @@ def _download_via_tiktok_proxy(url: str) -> Optional[bytes]:
     return None
 
 def _download_via_yt_dlp(url: str) -> str:
-    """Download to VIDEO_DIR via yt-dlp and return the saved file path (raises on failure)."""
     url = _normalize_tiktok_url(url)
     outtmpl = str(VIDEO_DIR / (str(uuid.uuid4()) + ".%(ext)s"))
 
-    # Attempts escalate: vanilla -> headers -> cookiesfrombrowser
     attempts: List[Dict[str, Any]] = []
-
     base_opts = {
         "outtmpl": outtmpl,
         "quiet": True,
@@ -194,8 +211,8 @@ def _download_via_yt_dlp(url: str) -> str:
         "geo_bypass": True,
     }
 
-    attempts.append(dict(base_opts))  # 1) vanilla
-    attempts.append({                 # 2) UA + extractor args
+    attempts.append(dict(base_opts))
+    attempts.append({
         **base_opts,
         "http_headers": {
             "User-Agent": UA_DESKTOP,
@@ -204,9 +221,9 @@ def _download_via_yt_dlp(url: str) -> str:
         },
         "extractor_args": {"tiktok": {"app_language": ["en"], "region": ["US"]}},
     })
-    attempts.append({                 # 3) cookies from browser (optional)
+    attempts.append({
         **attempts[-1],
-        "cookiesfrombrowser": ("chrome",),  # or ("edge",)
+        "cookiesfrombrowser": ("chrome",),
     })
 
     last_err: Optional[Exception] = None
@@ -234,22 +251,21 @@ def _video_capture_meta(path: str) -> Dict[str, Any]:
         raise HTTPException(400, f"Cannot open video: {path}")
     fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
     frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
     cap.release()
     duration = (frames / fps) if fps > 0 else 0.0
     return dict(width=width, height=height, fps=fps, frames=frames, duration_sec=duration)
 
 def _analyze_video_basic(path: str, sample_every: int = 10) -> AnalyzeResp:
-    """Basic CV analysis: brightness, motion, naive scene cuts, and thumbnails."""
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise HTTPException(400, "Cannot open video for analysis.")
 
-    fps  = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
+    fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
     nfrm = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-    w    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
-    h    = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
     duration = (nfrm / fps) if fps > 0 else 0.0
 
     prev_gray = None
@@ -285,7 +301,6 @@ def _analyze_video_basic(path: str, sample_every: int = 10) -> AnalyzeResp:
                 ts = fidx / fps if fps > 0 else 0.0
                 scene_cuts.append(SceneCut(frame_idx=fidx, ts_sec=ts, diff_score=float(s)))
 
-    # thumbnails (3 points)
     thumbs = []
     points = [0.15, 0.5, 0.85] if nfrm > 0 else []
     cap = cv2.VideoCapture(path)
@@ -308,7 +323,6 @@ def _analyze_video_basic(path: str, sample_every: int = 10) -> AnalyzeResp:
 
 # ---------- FFmpeg helpers ----------
 def _resolve_ffmpeg_path() -> str:
-    """Return absolute path to ffmpeg or raise a clear error."""
     exe = FFMPEG_BIN
     if os.path.sep in exe or (os.path.altsep and os.path.altsep in exe):
         ap = os.path.abspath(exe)
@@ -330,7 +344,6 @@ def _ffmpeg_preflight() -> str:
         raise HTTPException(500, f"FFmpeg exists but failed: {e.stdout[:300]}")
 
 def _extract_audio_ffmpeg(video_path: str, out_ext: str = ".mp3", abr: str = "192k") -> str:
-    """Extract audio track with ffmpeg. Returns audio file path."""
     exe = _resolve_ffmpeg_path()
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     stem = os.path.splitext(os.path.basename(video_path))[0]
@@ -355,20 +368,17 @@ def _extract_audio_ffmpeg(video_path: str, out_ext: str = ".mp3", abr: str = "19
         err = e.stderr.decode(errors="ignore") if isinstance(e.stderr, (bytes, bytearray)) else str(e.stderr)
         raise HTTPException(500, f"ffmpeg audio extract failed: {err[:300]}")
 
-# ---------- Scene detection ----------
+# ---------- Scene detection (OpenCV - CŨ) ----------
 def _detect_scenes_hsv(path: str, hist_bins: int = 32, diff_thr: float = 0.45, min_gap_frames: int = 10):
-    """Scene boundary detection using HSV hist correlation. Returns (cuts, fps, nframes)."""
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise HTTPException(400, "Cannot open video for scene detection.")
     fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
     nfrm = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-
     cuts = [0]
     prev_hist = None
     last_cut = 0
     idx = 0
-
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -376,7 +386,6 @@ def _detect_scenes_hsv(path: str, hist_bins: int = 32, diff_thr: float = 0.45, m
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         hist = cv2.calcHist([hsv], [0, 1], None, [hist_bins, hist_bins], [0, 180, 0, 256])
         cv2.normalize(hist, hist, 0, 1, cv2.NORM_MINMAX)
-
         if prev_hist is not None:
             corr = cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL)
             diff = 1.0 - float(corr)
@@ -385,7 +394,6 @@ def _detect_scenes_hsv(path: str, hist_bins: int = 32, diff_thr: float = 0.45, m
                 last_cut = idx
         prev_hist = hist
         idx += 1
-
     cap.release()
     if cuts and cuts[-1] != nfrm - 1:
         cuts.append(nfrm - 1)
@@ -395,9 +403,9 @@ def _segments_from_cuts(cuts: List[int], fps: float) -> List[SceneSegment]:
     segs: List[SceneSegment] = []
     for i in range(len(cuts) - 1):
         start_f = cuts[i]
-        end_f   = cuts[i + 1]
+        end_f = cuts[i + 1]
         start_t = max(0.0, start_f / fps if fps > 0 else 0.0)
-        end_t   = max(start_t, end_f / fps if fps > 0 else start_t)
+        end_t = max(start_t, end_f / fps if fps > 0 else start_t)
         segs.append(SceneSegment(
             start_sec=round(start_t, 3),
             end_sec=round(end_t, 3),
@@ -408,7 +416,9 @@ def _segments_from_cuts(cuts: List[int], fps: float) -> List[SceneSegment]:
 def _scene_stats(segs: List[SceneSegment]) -> Dict[str, float]:
     if not segs:
         return dict(count=0, mean=0, median=0, p90=0, shortest=0, longest=0)
-    arr = np.array([s.duration_sec for s in segs], dtype=np.float32)
+    arr = np.array([s.duration_sec for s in segs if s.duration_sec is not None], dtype=np.float32)
+    if arr.size == 0:
+        return dict(count=0, mean=0, median=0, p90=0, shortest=0, longest=0)
     return {
         "count": float(len(segs)),
         "mean": float(np.mean(arr)),
@@ -420,19 +430,13 @@ def _scene_stats(segs: List[SceneSegment]) -> Dict[str, float]:
 
 # ---------- 3.1 Content deliverables helpers ----------
 def _extract_carousel_images(video_path: str, num_images: int = 5) -> List[str]:
-    """
-    Grab `num_images` evenly spaced frames and save to THUMB_DIR.
-    Returns public URLs suitable for frontend use.
-    """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise HTTPException(400, "Cannot open video for carousel generation.")
-
     nfrm = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
     if nfrm <= 0:
         cap.release()
         return []
-
     idxs = np.linspace(int(nfrm * 0.05), int(nfrm * 0.95), num=num_images, dtype=int)
     urls: List[str] = []
     for idx in idxs:
@@ -445,11 +449,9 @@ def _extract_carousel_images(video_path: str, num_images: int = 5) -> List[str]:
         cv2.imwrite(str(out_path), frame)
         public = _to_public_url(str(out_path)) or str(out_path)
         urls.append(public)
-
     cap.release()
     return urls
 
-# NOTE: We intentionally return empty captions; the frontend builds real captions from MVP.
 def _generate_platform_captions(_: str, __: Dict[str, float]) -> PlatformCaptions:
     return PlatformCaptions(facebook="", instagram="", tiktok="", youtube_shorts="")
 
@@ -457,7 +459,7 @@ def _build_content_deliverables(video_path: str,
                                 source_url: str,
                                 stats: Dict[str, float]) -> ContentDeliverables:
     carousel = _extract_carousel_images(video_path, num_images=5)
-    caps = _generate_platform_captions(source_url, stats)  # empty placeholders (frontend will override)
+    caps = _generate_platform_captions(source_url, stats)
     ctas = [
         "Bạn thấy điểm nào đáng bàn nhất? Bình luận để mình làm phần tiếp theo!",
         "👉 Lưu lại để xem sau & tag một người bạn cần xem!",
@@ -466,10 +468,59 @@ def _build_content_deliverables(video_path: str,
     return ContentDeliverables(
         video_stub_path=video_path,
         carousel_images=carousel,
-        captions=caps,           # kept for compatibility; values are empty strings
+        captions=caps,
         cta_comments=ctas,
-        carousel_zip_url=None,   # set later if you implement zipping
+        carousel_zip_url=None,
     )
+
+# --- [MỚI] HÀM TRỢ GIÚP TÌM Ô TRONG SHEET ---
+async def _find_sheet_cell_coords(
+    gc: AsyncioGspreadClient,
+    sheet_title: str,
+    lookup_url: str,
+    target_col_name: str,
+    url_col_name: str = "Link Video Gốc" # Giả định cột URL
+) -> (Optional[int], Optional[int]):
+    """
+    Tìm (Hàng, Cột) 1-based để cập nhật, dựa trên URL.
+    """
+    try:
+        data = await read_sheet_data(gc, SPREADSHEET_ID, sheet_title)
+        
+        if not data:
+            print(f"Sheet '{sheet_title}' trống.")
+            return None, None
+        
+        # Giả định hàng đầu tiên là header
+        headers = [str(h).strip().lower() for h in data[0]]
+        
+        try:
+            url_col_idx = headers.index(url_col_name.lower())
+        except ValueError:
+            print(f"Lỗi: Không tìm thấy cột URL '{url_col_name}' trong sheet '{sheet_title}'.")
+            return None, None
+            
+        try:
+            target_col_idx = headers.index(target_col_name.lower())
+        except ValueError:
+            print(f"Lỗi: Không tìm thấy cột Target '{target_col_name}' trong sheet '{sheet_title}'.")
+            return None, None
+
+        # Lặp qua dữ liệu (bỏ qua header) để tìm URL
+        for i, row in enumerate(data[1:]):
+            if row and len(row) > url_col_idx and row[url_col_idx] == lookup_url:
+                target_row = i + 2  # +1 vì bỏ qua header, +1 vì gspread 1-based
+                target_col = target_col_idx + 1 # +1 vì gspread 1-based
+                return target_row, target_col
+                
+        print(f"Không tìm thấy URL '{lookup_url}' trong cột '{url_col_name}'.")
+        return None, None
+
+    except Exception as e:
+        print(f"Lỗi khi đọc/tìm kiếm sheet '{sheet_title}': {e}")
+        return None, None
+# --- KẾT THÚC HÀM TRỢ GIÚP ---
+
 
 # ---------- ENDPOINTS ----------
 @router.post("/download", response_model=DownloadResp)
@@ -478,7 +529,6 @@ def download_video(url: HttpUrl):
     saved_path = None
     note = None
 
-    # Prefer proxy for TikTok first (fast, no cookies).
     if "tiktok.com" in url:
         data = _download_via_tiktok_proxy(url)
         if data:
@@ -519,15 +569,15 @@ def analyze_video(path: Optional[str] = Query(None), url: Optional[HttpUrl] = Qu
         if not os.path.exists(local_path):
             raise HTTPException(404, f"File not found: {local_path}")
     else:
-        dl = download_video(url=url)  # reuse logic
+        dl = download_video(url=url)
         local_path = dl.saved_path
 
     meta = _video_capture_meta(local_path)
     analysis = _analyze_video_basic(local_path)
 
-    analysis.width  = meta["width"]
+    analysis.width = meta["width"]
     analysis.height = meta["height"]
-    analysis.fps    = meta["fps"]
+    analysis.fps = meta["fps"]
     analysis.frames = meta["frames"]
     analysis.duration_sec = meta["duration_sec"]
 
@@ -539,54 +589,199 @@ def download_and_analyze(url: HttpUrl):
     analysis = analyze_video(path=dl.saved_path)
     return AllInOneResp(download=dl, analysis=analysis)
 
+
+# === ĐÃ SỬA LỖI LOGIC TRY/EXCEPT VÀ CẬP NHẬT EXPORT JSON VÀO 1 Ô ===
 @router.post("/viral-analyze", response_model=ViralAnalyzeResp)
-def viral_analyze(
+async def viral_analyze(
     url: HttpUrl,
+    gc: AsyncioGspreadClient = Depends(get_sheet_client), 
     audio_ext: str = Query(".mp3", pattern=r"^\.(mp3|wav)$"),
-    scene_sensitivity: float = Query(0.45, ge=0.1, le=0.9),
-    min_scene_gap_frames: int = Query(10, ge=1)
+    language: Optional[str] = Query("vi", description="Ngôn ngữ (ví dụ: 'vi', 'en')"),
 ):
     """
-    Viral analysis for TikTok (and others via yt-dlp):
-      - Input: TikTok link
-      - Output: audio file (.mp3/.wav) + scene segments (start/end/duration)
-               + 3.1 Content deliverables (carousel images; captions left empty for frontend MVP)
+    Phân tích video dựa trên LỜI THOẠI (AI-driven):
+    - 1. Tải video, trích xuất audio.
+    - 2. Chạy Whisper để tạo phụ đề (all_segments).
+    - 3. Gửi transcript cho AI (Gemini) để sửa lỗi và tìm highlights (ai_highlights).
+    - 4. Tìm hàng trong sheet 'Source' và cập nhật ô 'subtitle video' bằng file JSON.
+    - 5. Trả về CẢ HAI danh sách cho frontend.
     """
-    # 1) Download video
-    dl = download_video(url=url)
+    
+    # 1) Download và Extract Audio
+    dl = await run_in_threadpool(download_video, url=url)
     video_path = dl.saved_path
-
-    # 2) Extract audio
-    _ffmpeg_preflight()
-    audio_path = _extract_audio_ffmpeg(video_path, out_ext=audio_ext)
+    
+    await run_in_threadpool(_ffmpeg_preflight)
+    audio_path = await run_in_threadpool(
+        _extract_audio_ffmpeg, video_path, out_ext=audio_ext
+    )
     audio_format = os.path.splitext(audio_path)[1].lstrip(".").lower()
 
-    # 3) Scene detection -> segments + stats
-    cuts, fps, _ = _detect_scenes_hsv(
-        video_path,
-        hist_bins=32,
-        diff_thr=scene_sensitivity,
-        min_gap_frames=min_scene_gap_frames
-    )
-    segs = _segments_from_cuts(cuts, fps)
-    stats = _scene_stats(segs)
+    # Khởi tạo các danh sách kết quả
+    final_all_segments: List[SceneSegment] = []
+    final_ai_highlights: List[SceneSegment] = []
+    stats_all: Dict[str, float] = {}
+    stats_ai: Dict[str, float] = {}
 
-    # 4) Build 3.1 Content deliverables (images; captions empty to be filled by MVP on frontend)
-    content_deliv = _build_content_deliverables(
-        video_path=video_path,
-        source_url=str(url),
-        stats=stats
-    )
+    # === BẮT ĐẦU KHỐI TRY CHÍNH ===
+    try:
+        # 3) Tạo phụ đề (Transcript)
+        print(f"[viral_analyze] Bắt đầu transcribe (lang={language})...")
+        with tempfile.TemporaryDirectory() as tmp:
+            srt_path = os.path.join(tmp, "subs.srt")
+            
+            raw_segments_tuples = await run_in_threadpool(
+                transcribe_to_srt,
+                video_path,
+                srt_path,
+                language=language
+            )
+        
+        if not raw_segments_tuples:
+            raise Exception("Không thể tạo phụ đề (transcription). Video có thể không có lời thoại.")
 
-    return ViralAnalyzeResp(
-        ok=True,
-        source_url=str(url),
-        video_path=video_path,
-        audio_path=audio_path,
-        audio_format=audio_format,
-        scenes=segs,
-        stats=stats,
-        video_url=_to_public_url(video_path),
-        audio_url=_to_public_url(audio_path),
-        content_deliverables=content_deliv,
-    )
+        # 4) LUÔN LUÔN xử lý 'all_segments'
+        for _, start, end, text in raw_segments_tuples:
+            duration = round(end - start, 3)
+            if duration < 0.1: continue
+            final_all_segments.append(SceneSegment(
+                start_sec=start,
+                end_sec=end,
+                duration_sec=duration,
+                text=text.strip(),
+                reason=""
+            ))
+        stats_all = _scene_stats(final_all_segments)
+
+        # 5) Format transcript cho AI
+        raw_transcript_string = "\n".join(
+            f"[{s:.3f} --> {e:.3f}] {t.strip()}" 
+            for _, s, e, t in raw_segments_tuples
+        )
+        print(f"[viral_analyze] Đã transcribe. Bắt đầu sửa lỗi AI...")
+
+        # 6) Sửa lỗi chính tả (Proofreading)
+        corrected_transcript_string = await run_in_threadpool(
+            nlp.correct_subtitles, raw_transcript_string
+        )
+        print(f"[viral_analyze] Đã sửa lỗi. Bắt đầu tìm đoạn hay (highlights)...")
+
+        # 7) Phân tích của AI (AI Analysis) - để lấy highlights
+        ai_segments_list = await run_in_threadpool(
+            nlp.find_interesting_segments, corrected_transcript_string
+        )
+
+        # 8) Xử lý 'ai_highlights' (NẾU CÓ)
+        if ai_segments_list:
+            print(f"[viral_analyze] AI đã tìm thấy {len(ai_segments_list)} đoạn hay.")
+            for ai_seg in ai_segments_list:
+                duration = round(ai_seg.end_sec - ai_seg.start_sec, 3)
+                if duration < 0.1: continue
+                final_ai_highlights.append(SceneSegment(
+                    start_sec=ai_seg.start_sec,
+                    end_sec=ai_seg.end_sec,
+                    duration_sec=duration,
+                    text=ai_seg.text,
+                    reason=ai_seg.reason
+                ))
+            stats_ai = _scene_stats(final_ai_highlights)
+        else:
+            print("[viral_analyze] AI không tìm thấy highlights nào.")
+        
+        # === [SỬA ĐỔI] EXPORT JSON VÀO 1 Ô TRONG SHEET 'Source' ===
+        try:
+            print(f"[viral_analyze] Chuẩn bị export JSON (chỉ all_segments) vào sheet 'Source'...")
+            
+            # 1. Định nghĩa Tên
+            SOURCE_SHEET_TITLE = "Source"
+            TARGET_COLUMN_NAME = "subtitle video"
+            LOOKUP_COLUMN_NAME = "Link Video Gốc" 
+            
+            # 2. [SỬA] Gộp CHỈ all_segments và stats của nó vào JSON
+            final_json_data = {
+                "all_segments": [s.model_dump() for s in final_all_segments],
+                "stats": {
+                    "all_segments": stats_all
+                }
+            }
+            final_json_string = json.dumps(final_json_data, ensure_ascii=False)
+            
+            # 3. Chuẩn hóa URL đầu vào TRƯỚC khi tìm kiếm
+            normalized_lookup_url = _normalize_tiktok_url(str(url))
+            
+            # 4. Tìm ô cần cập nhật
+            (target_row, target_col) = await _find_sheet_cell_coords(
+                gc,
+                SOURCE_SHEET_TITLE,
+                normalized_lookup_url, # <-- Truyền URL đã chuẩn hóa
+                TARGET_COLUMN_NAME,
+                LOOKUP_COLUMN_NAME
+            )
+            
+            # 5. Cập nhật ô nếu tìm thấy
+            if target_row and target_col:
+                print(f"[viral_analyze] Đang cập nhật sheet '{SOURCE_SHEET_TITLE}' tại ô (R{target_row}, C{target_col})...")
+                await update_sheet_cell(
+                    gc,
+                    SPREADSHEET_ID,
+                    SOURCE_SHEET_TITLE,
+                    target_row,
+                    target_col,
+                    final_json_string # <-- Đặt chuỗi JSON (chỉ all_segments) vào ô
+                )
+                print(f"[viral_analyze] Cập nhật JSON vào sheet thành công.")
+            else:
+                print(f"[viral_analyze] CẢNH BÁO: Không tìm thấy hàng khớp với URL '{normalized_lookup_url}'. Bỏ qua cập nhật sheet.")
+                print(f"[viral_analyze] HÃY KIỂM TRA: 1. URL đã có trong cột '{LOOKUP_COLUMN_NAME}' của sheet '{SOURCE_SHEET_TITLE}' chưa? 2. Tên các cột đã chính xác chưa?")
+
+        except Exception as e_sheet:
+            # Ghi lại lỗi sheet nhưng vẫn tiếp tục
+            print(f"LỖI (Google Sheet JSON Export): {e_sheet}")
+        
+        # === KẾT THÚC EXPORT GOOGLE SHEET ===
+
+        # 9) Build 3.1 Content deliverables
+        content_deliv = await run_in_threadpool(
+            _build_content_deliverables,
+            video_path=video_path,
+            source_url=str(url),
+            stats=stats_all 
+        )
+
+        # 10) Trả về kết quả THÀNH CÔNG
+        return ViralAnalyzeResp(
+            ok=True,
+            source_url=str(url),
+            video_path=video_path,
+            audio_path=audio_path,
+            audio_format=audio_format,
+            
+            all_segments=final_all_segments,
+            all_segments_stats=stats_all,
+            
+            ai_highlights=final_ai_highlights,
+            ai_highlights_stats=stats_ai,
+            
+            video_url=_to_public_url(video_path),
+            audio_url=_to_public_url(audio_path),
+            content_deliverables=content_deliv,
+        )
+
+    # === KHỐI EXCEPT CHÍNH ===
+    except Exception as e:
+        print(f"LỖI NGHIÊM TRỌNG trong quy trình AI viral_analyze: {e}")
+        # Trả về lỗi, nhưng vẫn tuân thủ Response Model
+        return ViralAnalyzeResp(
+            ok=False,
+            source_url=str(url),
+            video_path=video_path,
+            audio_path=audio_path,
+            audio_format=audio_format,
+            all_segments=final_all_segments, # Vẫn trả về nếu đã transcribe được
+            all_segments_stats=stats_all,
+            ai_highlights=[],
+            ai_highlights_stats={},
+            video_url=_to_public_url(video_path),
+            audio_url=_to_public_url(audio_path),
+            content_deliverables=None,
+        )

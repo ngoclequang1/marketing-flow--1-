@@ -4,7 +4,6 @@ from pydantic import BaseModel
 import google.generativeai as genai
 from google.generativeai import types
 from typing import Optional
-from app.services.trends import keyword_snapshot
 from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter()
@@ -46,7 +45,6 @@ async def keyword_report(req: KwReq):
     
     draft_error_note: Optional[str] = None
     
-    snap = await run_in_threadpool(keyword_snapshot, req.keyword, geo=req.geo)
 
     # --- ĐÃ SỬA LỖI ---
     # Thay 'genai.API_KEY' bằng biến 'GEMINI_API_KEY'
@@ -59,7 +57,6 @@ async def keyword_report(req: KwReq):
         prompt = (
             f"Keyword: {req.keyword}\n"
             f"Template: {template}\n"
-            f"Trends (last 12m + related queries): {snap}\n"
             f"Write in Vietnamese. Keep it practical and high-converting."
         )
         try:
@@ -77,7 +74,6 @@ async def keyword_report(req: KwReq):
 
     return {
         "keyword": req.keyword, 
-        "trends": snap, 
         "draft": draft, 
         "draft_error_note": draft_error_note
     }
