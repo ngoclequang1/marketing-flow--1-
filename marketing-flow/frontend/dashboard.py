@@ -216,10 +216,6 @@ with tab_mvp:
                 except Exception as e:
                     st.error(f"Lỗi kết nối: {e}")
 
-# ==========================================================
-# ===== TÍNH NĂNG 2: PHÂN TÍCH TIKTOK (ĐÃ CẬP NHẬT) =====
-# ==========================================================
-# [THAY THẾ TOÀN BỘ 'with tab_tiktok:' TRONG dashboard.py]
 
 # ==========================================================
 # ===== TÍNH NĂNG 2: PHÂN TÍCH TIKTOK (ĐÃ CẬP NHẬT) =====
@@ -229,9 +225,11 @@ with tab_tiktok:
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("Phân tích Video TikTok")
-        tt_url = st.text_input("Dán URL video TikTok", key="tt_url")
         
-        # Thêm tùy chọn Ngôn ngữ
+        # [SỬA] Thêm ô nhập Keyword
+        tt_url = st.text_input("Dán URL video TikTok", key="tt_url")
+        tt_keyword = st.text_input("Nhập Keyword (Bắt buộc)", key="tt_keyword")
+        
         language = st.selectbox(
             "Chọn ngôn ngữ của video",
             options=["vi", "en", "auto"],
@@ -241,24 +239,35 @@ with tab_tiktok:
         )
         
         if st.button("Phân tích TikTok"):
-            with st.spinner("Đang tải, tạo phụ đề và phân tích AI... (Việc này có thể mất 1-2 phút)"):
-                try:
-                    params = {"url": tt_url, "language": language}
-                    res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300) # Tăng timeout
-                    
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.session_state['tt_analysis_result'] = data # Lưu kết quả
-                    
-                    else:
-                        st.error(f"Lỗi API: {res.text}")
-                        st.session_state.pop('tt_analysis_result', None)
+            
+            # [SỬA] Thêm kiểm tra validation
+            if not tt_url or not tt_keyword:
+                st.warning("Vui lòng nhập cả URL TikTok và Keyword.")
+            else:
+                with st.spinner("Đang tải, tạo phụ đề và phân tích AI... (Việc này có thể mất 1-2 phút)"):
+                    try:
+                        # [SỬA] Thêm 'keyword' vào params
+                        params = {
+                            "url": tt_url, 
+                            "language": language,
+                            "keyword": tt_keyword 
+                        }
+                        res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300) # Tăng timeout
+                        
+                        if res.status_code == 200:
+                            data = res.json()
+                            st.session_state['tt_analysis_result'] = data # Lưu kết quả
+                            st.success("Phân tích thành công! Dữ liệu đã được lưu vào Google Sheet.")
+                        
+                        else:
+                            st.error(f"Lỗi API: {res.text}")
+                            st.session_state.pop('tt_analysis_result', None)
 
-                except requests.exceptions.ReadTimeout:
-                     st.error("Lỗi: Yêu cầu hết thời gian (Timeout). Tác vụ phân tích này tốn nhiều thời gian hơn dự kiến. Vui lòng thử lại với video ngắn hơn.")
-                except Exception as e:
-                    st.error(f"Lỗi kết nối: {e}")
-                    st.session_state.pop('tt_analysis_result', None)
+                    except requests.exceptions.ReadTimeout:
+                         st.error("Lỗi: Yêu cầu hết thời gian (Timeout). Tác vụ phân tích này tốn nhiều thời gian hơn dự kiến. Vui lòng thử lại với video ngắn hơn.")
+                    except Exception as e:
+                        st.error(f"Lỗi kết nối: {e}")
+                        st.session_state.pop('tt_analysis_result', None)
 
         # --- Hiển thị kết quả (nếu có) từ session_state ---
         if 'tt_analysis_result' in st.session_state:
@@ -266,6 +275,9 @@ with tab_tiktok:
             
             st.subheader("Kết quả phân tích")
 
+            # (Phần code hiển thị video, audio, stats, CTA, và 2 bảng dữ liệu)
+            # (GIỮ NGUYÊN TỪ ĐÂY ĐẾN HẾT TAB 2)
+            
             source_url = data.get('source_url')
             if source_url:
                 st.caption(f"Nguồn: {source_url}")
@@ -290,11 +302,9 @@ with tab_tiktok:
 
             st.divider() 
             
-            # --- TẠO 2 CỘT CHO DỮ LIỆU (STATS VÀ CTA) ---
             data_col1, data_col2 = st.columns(2)
             
             with data_col1:
-                # [SỬA] Hiển thị stats của TOÀN BỘ phụ đề
                 stats_all = data.get('all_segments_stats', {})
                 if stats_all:
                     st.subheader("📊 Thống kê (Toàn bộ Phụ đề)")
@@ -304,14 +314,16 @@ with tab_tiktok:
                     st.metric("Dài nhất", f"{stats_all.get('longest', 0):.2f}s")
 
             with data_col2:
-                ctas = data.get('content_deliverables', {}).get('cta_comments', [])
+                # [SỬA LỖI] Xử lý 'None' an toàn
+                ctas = (data.get('content_deliverables') or {}).get('cta_comments', [])
                 if ctas:
                     st.subheader("💬 Gợi ý CTA")
                     for cta in ctas:
                         st.markdown(f"- {cta}")
-
+                else:
+                    st.subheader("💬 Gợi ý CTA")
+                    st.caption("Không có gợi ý CTA.")
             
-            # --- [CẬP NHẬT] HIỂN THỊ THEO YÊU CẦU MỚI ---
             st.divider()
 
             # 1. Bảng Toàn bộ Phụ đề (LUÔN HIỂN THỊ)
@@ -348,17 +360,6 @@ with tab_tiktok:
                         st.markdown(f"**Nội dung:**")
                         st.write(text)
 
-            # --- Hiển thị Ảnh Carousel (Giữ nguyên) ---
-            images = data.get('content_deliverables', {}).get('carousel_images', [])
-            if images:
-                st.subheader("🖼️ Ảnh Carousel")
-                num_images_to_show = 5
-                cols = st.columns(num_images_to_show)
-                
-                for i, img_url in enumerate(images[:num_images_to_show]):
-                    if i < len(cols): 
-                        cols[i].image(f"{API_URL}{img_url}", use_container_width=True)
-
 # ==========================================================
 # ===== TÍNH NĂNG 3: TẠO PHỤ ĐỀ (POLLING) =====
 # ==========================================================
@@ -366,104 +367,217 @@ with tab_subtitle:
     # === CĂN GIỮA TOÀN BỘ TAB 3 ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
-        st.header("Tạo Phụ đề Tự động & Thêm nhạc nền")
+        st.header("Công cụ Phân tích & Remix Video")
 
-        vid_file = st.file_uploader("1. Tải lên video", type=["mp4", "mov", "avi", "mkv"])
-        bgm_file = st.file_uploader("2. (Tùy chọn) Tải lên nhạc nền (BGM)", type=["mp3", "wav", "m4a"])
+        # --- BƯỚC 1: PHÂN TÍCH (Giống Tool 2) ---
+        st.subheader("Bước 1: Phân tích Video")
         
-        bgm_mode = "mix" 
-        remove_original_audio = False # Mặc định
-        
-        if bgm_file:
-            bgm_mode_option = st.selectbox(
-                "Chế độ nhạc nền", 
-                options=["mix", "replace"],
-                format_func=lambda x: "Trộn (Giữ giọng nói)" if x == "mix" else "Thay thế (Xóa âm thanh gốc)"
-            )
-            remove_original_audio = (bgm_mode_option == "replace")
+        # Khởi tạo state
+        if 'tt_analysis_done' not in st.session_state:
+            st.session_state.tt_analysis_done = False
+        if 'tt_analysis_results' not in st.session_state:
+            st.session_state.tt_analysis_results = {}
 
-        col1, col2 = st.columns(2)
-        with col1:
-            burn_in = st.checkbox("Ghi đè phụ đề (Hard sub)", value=True)
-        with col2:
-            flip_video = st.checkbox("Lật video (Flip)", value=False)
+        tt_url = st.text_input("Dán URL video TikTok", key="remix_url")
+        tt_keyword = st.text_input("Nhập Keyword (Bắt buộc)", key="remix_keyword")
+        language = st.selectbox(
+            "Chọn ngôn ngữ của video",
+            options=["vi", "en", "auto"],
+            index=0,
+            format_func=lambda x: "Tiếng Việt" if x == "vi" else ("Tiếng Anh" if x == "en" else "Tự động phát hiện"),
+            key="remix_lang"
+        )
         
-        if st.button("Tạo video"):
-            if not vid_file:
-                st.warning("Bạn phải tải lên một video")
+        if st.button("Phân tích Video"):
+            st.session_state.tt_analysis_done = False
+            st.session_state.tt_analysis_results = {}
+            
+            if not tt_url or not tt_keyword:
+                st.warning("Vui lòng nhập cả URL TikTok và Keyword.")
             else:
-                status_placeholder = st.empty()
-                status_placeholder.info("Đang tải file lên và bắt đầu xử lý...")
-
-                try:
-                    files = {'video': (vid_file.name, vid_file, vid_file.type)}
-                    form_data = {
-                        'burn_in': str(burn_in),
-                        'flip': str(flip_video),
-                        'language': '' # Ngôn ngữ (nếu cần, có thể thêm UI)
-                    }
-                    
-                    if bgm_file:
-                        files['bgm'] = (bgm_file.name, bgm_file, bgm_file.type)
-                        # SỬA LỖI: Gửi 'remove_original_audio' qua form
-                        form_data['remove_original_audio'] = str(remove_original_audio)
-
-                    start_res = requests.post(
-                        f"{API_URL}/process", 
-                        files=files, 
-                        data=form_data
-                    )
-                    
-                    if start_res.status_code != 200:
-                        st.error(f"Lỗi khi bắt đầu job: {start_res.text}")
-                    else:
-                        start_data = start_res.json()
-                        job_id = start_data.get('job_id')
+                with st.spinner("Đang tải, tạo phụ đề và phân tích AI... (Việc này có thể mất 1-2 phút)"):
+                    try:
+                        params = {
+                            "url": tt_url, 
+                            "language": language,
+                            "keyword": tt_keyword 
+                        }
+                        res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
-                        if not job_id:
-                            st.error("API không trả về job_id")
+                        if res.status_code == 200:
+                            data = res.json()
+                            st.session_state.tt_analysis_results = data
+                            st.session_state.tt_analysis_done = True
+                            st.success("Phân tích thành công! Dữ liệu đã được lưu vào 'Source Phân tích Video'.")
                         else:
-                            status_placeholder.info(f"Đang xử lý... (Job ID: {job_id[:8]})")
-                            
-                            download_url = None
-                            while True:
-                                status_res = requests.get(f"{API_URL}/process/status/{job_id}")
-                                if status_res.status_code != 200:
-                                    st.error("Lỗi khi kiểm tra trạng thái job.")
-                                    break
-                                
-                                status_data = status_res.json()
-                                
-                                if status_data.get('status') == 'complete':
-                                    status_placeholder.success("Xử lý hoàn tất!")
-                                    download_url = status_data.get('download_url')
-                                    break
-                                elif status_data.get('status') == 'failed':
-                                    st.error(f"Job thất bại: {status_data.get('error')}")
-                                    break
-                                
-                                time.sleep(5) 
-                            
-                            if download_url:
-                                final_url = f"{API_URL}{download_url}"
-                                
-                                # === DÙNG HTML/CSS ĐỂ KHÓA TỶ LỆ 16:9 ===
-                                video_html = f"""
-                                <div class="video-wrapper-16_9">
-                                    <video controls autoplay playsinline>
-                                        <source src="{final_url}" type="video/mp4">
-                                        Trình duyệt của bạn không hỗ trợ video này.
-                                    </video>
-                                </div>
-                                """
-                                st.markdown(video_html, unsafe_allow_html=True)
-                                # === KẾT THÚC SỬA LỖI ===
+                            st.error(f"Lỗi API: {res.text}")
 
-                                st.link_button("Tải video về", final_url)
-                                
-                except Exception as e:
-                    st.error(f"Lỗi nghiêm trọng: {e}")
+                    except requests.exceptions.ReadTimeout:
+                         st.error("Lỗi: Yêu cầu hết thời gian (Timeout).")
+                    except Exception as e:
+                        st.error(f"Lỗi kết nối: {e}")
 
+        # --- BƯỚC 2: HIỂN THỊ KẾT QUẢ PHÂN TÍCH (NẾU CÓ) ---
+        if st.session_state.tt_analysis_done:
+            data = st.session_state.tt_analysis_results
+            
+            # (Sao chép y hệt code hiển thị của Tool 2)
+            source_url = data.get('source_url')
+            if source_url:
+                st.caption(f"Nguồn: {source_url}")
+            
+            video_url = data.get('video_url')
+            if video_url:
+                video_url_full = f"{API_URL}{video_url}"
+                video_html = f"""
+                <div class="video-wrapper-16_9">
+                    <video controls autoplay playsinline key="{data.get('video_path')}">
+                        <source src="{video_url_full}" type="video/mp4">
+                    </video>
+                </div>
+                """
+                st.markdown(video_html, unsafe_allow_html=True)
+            
+            st.divider() 
+
+            st.subheader("🎬 Toàn bộ Phụ đề của Video")
+            all_segments_data = data.get('all_segments', [])
+            if not all_segments_data:
+                st.info("Không có dữ liệu phụ đề.")
+            else:
+                st.dataframe(all_segments_data, height=200, use_container_width=True)
+
+            st.subheader("🤖 Highlights do AI chọn")
+            ai_highlights_data = data.get('ai_highlights', [])
+            if not ai_highlights_data:
+                st.info("AI không tìm thấy highlights nào.")
+            else:
+                st.caption(f"AI đã chọn ra {len(ai_highlights_data)} đoạn hay nhất.")
+                for i, scene in enumerate(ai_highlights_data):
+                    start_time = scene.get('start_sec', 0.0)
+                    end_time = scene.get('end_sec', 0.0)
+                    reason = scene.get('reason', 'N/A')
+                    text = scene.get('text', 'N/A')
+                    start_m, start_s = divmod(start_time, 60)
+                    end_m, end_s = divmod(end_time, 60)
+                    timestamp = f"[{int(start_m):02d}:{start_s:04.1f} -> {int(end_m):02d}:{end_s:04.1f}]"
+                    with st.expander(f"**{i+1}. {reason}** ({timestamp})"):
+                        st.write(text)
+            
+            # --- BƯỚC 3: TÙY CHỌN CHỈNH SỬA & TẠO VIDEO ---
+            st.divider()
+            st.subheader("Bước 2: Tùy chọn Chỉnh sửa & Tạo Video")
+            
+            # Lấy thông tin cần thiết từ kết quả phân tích
+            source_video_path = data.get('video_path')
+            highlights_json_string = json.dumps(data.get('ai_highlights', []))
+
+            # Input mới
+            do_remix = st.checkbox("Remix video (chỉ giữ lại các highlights do AI chọn)", value=False, key="remix_do_remix")
+            
+            if do_remix and not ai_highlights_data:
+                st.warning("AI không tìm thấy highlights nào. Tính năng Remix sẽ bị bỏ qua và video gốc sẽ được sử dụng.")
+                do_remix = False # Tự động tắt nếu không có highlight
+
+            # Input cũ (giữ nguyên)
+            remix_bgm_file = st.file_uploader("2. (Tùy chọn) Tải lên nhạc nền (BGM)", type=["mp3", "wav", "m4a"], key="remix_bgm")
+            
+            remix_bgm_mode = "mix"
+            remix_remove_original_audio = False
+            
+            if remix_bgm_file:
+                remix_bgm_mode_option = st.selectbox(
+                    "Chế độ nhạc nền", 
+                    options=["mix", "replace"],
+                    format_func=lambda x: "Trộn (Giữ giọng nói)" if x == "mix" else "Thay thế (Xóa âm thanh gốc)",
+                    key="remix_bgm_mode"
+                )
+                remix_remove_original_audio = (remix_bgm_mode_option == "replace")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                remix_burn_in = st.checkbox("Ghi đè phụ đề (Hard sub)", value=True, key="remix_burn_in")
+            with col2:
+                remix_flip_video = st.checkbox("Lật video (Flip)", value=False, key="remix_flip")
+            
+            if st.button("Tạo video cuối cùng"):
+                if not source_video_path:
+                    st.error("Lỗi: Không tìm thấy 'video_path' từ kết quả phân tích.")
+                else:
+                    status_placeholder = st.empty()
+                    status_placeholder.info("Đang gửi yêu cầu xử lý video...")
+
+                    try:
+                        # Chuẩn bị Form Data
+                        form_data = {
+                            'source_video_path': source_video_path,
+                            'source_url': tt_url, # Lấy từ input Bước 1
+                            'keyword': tt_keyword, # Lấy từ input Bước 1
+                            'do_remix': str(do_remix),
+                            'highlights_json': highlights_json_string,
+                            'remove_original_audio': str(remix_remove_original_audio),
+                            'burn_in': str(remix_burn_in),
+                            'flip_video': str(remix_flip_video)
+                        }
+                        
+                        # Chuẩn bị File (chỉ BGM)
+                        files = {}
+                        if remix_bgm_file:
+                            files['bgm'] = (remix_bgm_file.name, remix_bgm_file, remix_bgm_file.type)
+
+                        # Gọi Endpoint MỚI
+                        start_res = requests.post(
+                            f"{API_URL}/process-remix", 
+                            files=files, 
+                            data=form_data
+                        )
+                        
+                        if start_res.status_code != 200:
+                            st.error(f"Lỗi khi bắt đầu job: {start_res.text}")
+                        else:
+                            start_data = start_res.json()
+                            job_id = start_data.get('job_id')
+                            
+                            if not job_id:
+                                st.error("API không trả về job_id")
+                            else:
+                                status_placeholder.info(f"Đang xử lý... (Job ID: {job_id[:8]})")
+                                
+                                download_url = None
+                                while True:
+                                    status_res = requests.get(f"{API_URL}/process/status/{job_id}")
+                                    if status_res.status_code != 200:
+                                        st.error("Lỗi khi kiểm tra trạng thái job.")
+                                        break
+                                    
+                                    status_data = status_res.json()
+                                    
+                                    if status_data.get('status') == 'complete':
+                                        status_placeholder.success("Xử lý hoàn tất! Video đã được upload lên Dropbox và Google Sheet.")
+                                        download_url = status_data.get('download_url')
+                                        break
+                                    elif status_data.get('status') == 'failed':
+                                        st.error(f"Job thất bại: {status_data.get('error')}")
+                                        break
+                                    
+                                    time.sleep(5) 
+                                
+                                if download_url:
+                                    final_url = f"{API_URL}{download_url}"
+                                    
+                                    final_video_html = f"""
+                                    <div class="video-wrapper-16_9">
+                                        <video controls autoplay playsinline>
+                                            <source src="{final_url}" type="video/mp4">
+                                        </video>
+                                    </div>
+                                    """
+                                    st.markdown(final_video_html, unsafe_allow_html=True)
+                                    st.link_button("Tải video về", final_url)
+                                    
+                    except Exception as e:
+                        st.error(f"Lỗi nghiêm trọng: {e}")
+                        
 # ==========================================================
 # ===== TÍNH NĂNG 4: ĐĂNG TẢI (SHEET) =====
 # ==========================================================
