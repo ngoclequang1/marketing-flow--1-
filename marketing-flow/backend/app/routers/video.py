@@ -533,11 +533,17 @@ def download_and_analyze(url: HttpUrl):
 
 
 # === [SỬA ĐỔI LỚN] CẬP NHẬT viral_analyze ===
+# [THAY THẾ TOÀN BỘ HÀM NÀY TRONG app/routers/video.py]
+
 @router.post("/viral-analyze", response_model=ViralAnalyzeResp)
 async def viral_analyze(
     url: HttpUrl,
     gc: AsyncioGspreadClient = Depends(get_sheet_client), 
-    keyword: str = Query(..., description="Keyword do người dùng nhập"), # <-- Đã thêm Keyword
+    keyword: str = Query(..., description="Keyword do người dùng nhập"), 
+    
+    # [THÊM DÒNG NÀY]
+    target_sheet: str = Query(..., description="Tên của tab (sheet) để upload kết quả"),
+    
     audio_ext: str = Query(".mp3", pattern=r"^\.(mp3|wav)$"),
     language: Optional[str] = Query("vi", description="Ngôn ngữ (ví dụ: 'vi', 'en')"),
 ):
@@ -546,7 +552,7 @@ async def viral_analyze(
     - 1. Tải video, trích xuất audio.
     - 2. Chạy Whisper để tạo phụ đề (all_segments).
     - 3. Gửi transcript cho AI (Gemini) để sửa lỗi và tìm highlights (ai_highlights).
-    - 4. Thêm hàng mới (keyword, link, json, checkbox) vào sheet 'Source Chỉnh sửa Video'.
+    - 4. Thêm hàng mới (keyword, link, json, checkbox) vào sheet được chỉ định.
     - 5. Trả về CẢ HAI danh sách cho frontend.
     """
     
@@ -634,12 +640,13 @@ async def viral_analyze(
         else:
             print("[viral_analyze] AI không tìm thấy highlights nào.")
         
-        # === [SỬA ĐỔI] EXPORT HÀNG MỚI VÀO SHEET 'Source Chỉnh sửa Video' ===
+        # === [SỬA ĐỔI] EXPORT HÀNG MỚI VÀO SHEET ĐỘNG ===
         try:
-            print(f"[viral_analyze] Chuẩn bị export hàng mới vào sheet 'Source Chỉnh sửa Video'...")
+            # 1. [SỬA] Dùng biến target_sheet được gửi từ frontend
+            TARGET_SHEET_TITLE = target_sheet 
             
-            # 1. Định nghĩa Tên (THEO HÌNH ẢNH MỚI)
-            TARGET_SHEET_TITLE = "Source Chỉnh sửa Video"
+            print(f"[viral_analyze] Chuẩn bị export hàng mới vào sheet '{TARGET_SHEET_TITLE}'...")
+            
             HEADER = ["keyword", "Link Video gốc", "subtitle video", "check box", "Remix Video Link"]
             CHECKBOX_COLUMN_NAME = "check box"
             
@@ -649,11 +656,10 @@ async def viral_analyze(
                 "stats": {
                     "all_segments": stats_all
                 }
-                # Bỏ qua ai_highlights theo yêu cầu trước
             }
             final_json_string = json.dumps(final_json_data, ensure_ascii=False)
             
-            # 3. Chuẩn bị hàng dữ liệu (THEO HÌNH ẢNH MỚI)
+            # 3. Chuẩn bị hàng dữ liệu
             new_row_data = [
                 keyword,
                 normalized_url_str, # Dùng URL đã chuẩn hóa
@@ -662,18 +668,19 @@ async def viral_analyze(
                 ""                  # <-- Cột 'Remix Video Link' để trống
             ]
             
-            # 4. Gọi export_rows (nó sẽ tự động tạo/tìm header và append)
+            # 4. Gọi export_rows
             print(f"[viral_analyze] Đang append 1 hàng mới vào sheet: {TARGET_SHEET_TITLE}...")
             await export_rows(
                 gc=gc,
                 spreadsheet_id=SPREADSHEET_ID,
-                title=TARGET_SHEET_TITLE,
-                rows=[new_row_data], # Phải là list of lists
+                title=TARGET_SHEET_TITLE, # <-- Dùng biến động
+                rows=[new_row_data], 
                 header_row=HEADER,
-                checkbox_columns=[CHECKBOX_COLUMN_NAME] # Đảm bảo nó là checkbox
+                checkbox_columns=[CHECKBOX_COLUMN_NAME]
             )
             print(f"[viral_analyze] Append hàng mới vào sheet thành công.")
 
+        # [SỬA] ĐÂY LÀ KHỐI BỊ THIẾU CỦA BẠN
         except Exception as e_sheet:
             # Ghi lại lỗi sheet nhưng vẫn tiếp tục
             print(f"LỖI (Google Sheet Export): {e_sheet}")

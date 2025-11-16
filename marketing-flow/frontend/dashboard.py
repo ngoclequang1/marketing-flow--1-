@@ -120,104 +120,6 @@ tab_mvp, tab_tiktok, tab_subtitle, tab_uploader, tab_dashboard = st.tabs([
 ])
 
 # ==========================================================
-# ===== TÍNH NĂNG 1: PHÂN TÍCH URL (MVP) =====
-# ==========================================================
-with tab_mvp:
-    # --- Helper Function for rendering ---
-    def render_structured_data(data_obj, title_map):
-        """
-        Hàm này nhận một dictionary (data_obj) và một map (title_map)
-        để render dữ liệu một cách thân thiện.
-        """
-        if not isinstance(data_obj, dict):
-            st.write(data_obj) 
-            return
-
-        for key, items in data_obj.items():
-            title = title_map.get(key, key.replace('_', ' ').capitalize())
-            st.markdown(f"**{title}**") 
-
-            if isinstance(items, list) and items:
-                for item in items:
-                    st.markdown(f"- {item}")
-            elif isinstance(items, str) and items:
-                st.write(items)
-            elif not items:
-                st.caption(f"Không có dữ liệu")
-            
-            st.write("") 
-    # --- End Helper Function ---
-
-    # === CĂN GIỮA TOÀN BỘ TAB 1 ===
-    _, main_col, _ = st.columns([0.5, 3, 0.5])
-    
-    with main_col:
-        st.header("Phân tích URL & Keyword")
-
-        url = st.text_input("Dán URL bài viết", key="mvp_url")
-        keyword = st.text_input("Nhập Keyword chính", key="mvp_kw")
-
-        if st.button("Chạy phân tích MVP"):
-            if not url or not keyword:
-                st.warning("Vui lòng nhập cả URL và Keyword")
-            else:
-                try:
-                    with st.spinner("Đang phân tích..."):
-                        payload = {"url": url, "keyword": keyword}
-                        res = requests.post(f"{API_URL}/mvp/run", json=payload)
-
-                        if res.status_code == 200:
-                            data = res.json()
-
-                            # --- Draft ---
-                            st.subheader("📝 Bản Nháp")
-                            st.text_area("Draft", data.get("draft", ""), height=220)
-                            
-                            # ---------------- INSIGHTS (Layout 2 cột) ----------------
-                            with st.container(border=True):
-                                st.subheader("🔍 Thông Tin Chi Tiết (Insights)")
-                                
-                                insights_data = data.get("insights")
-                                insights_map = {
-                                    "strengths": "Điểm Mạnh",
-                                    "weaknesses": "Điểm Yếu",
-                                    "formula": "Công thức/Cấu trúc",
-                                    "improvements": "Đề xuất Cải thiện",
-                                    "title_suggestion": "Tiêu đề gợi ý",
-                                    "keywords": "Keywords liên quan"
-                                }
-                                
-                                if isinstance(insights_data, dict):
-                                    # Tạo 2 cột bên trong container
-                                    col1, col2 = st.columns(2)
-
-                                    # Phân chia dữ liệu
-                                    col1_keys = ["strengths", "weaknesses", "formula"]
-                                    col2_keys = ["improvements", "title_suggestion", "keywords"]
-                                    
-                                    col1_data = {k: insights_data.get(k) for k in col1_keys if insights_data.get(k)}
-                                    col2_data = {k: insights_data.get(k) for k in col2_keys if insights_data.get(k)}
-                                    
-                                    with col1:
-                                        render_structured_data(col1_data, insights_map)
-                                    with col2:
-                                        render_structured_data(col2_data, insights_map)
-                                else:
-                                    # Fallback nếu 'insights' không phải là dict
-                                    render_structured_data(insights_data, insights_map)
-
-                            # --- RAW JSON ---
-                            with st.expander("📦 Xem dữ liệu gốc (Raw JSON)"):
-                                st.json(data)
-
-                        else:
-                            st.error(f"Lỗi từ API: {res.text}")
-                
-                except Exception as e:
-                    st.error(f"Lỗi kết nối: {e}")
-
-
-# ==========================================================
 # ===== TÍNH NĂNG 2: PHÂN TÍCH TIKTOK (ĐÃ CẬP NHẬT) =====
 # ==========================================================
 with tab_tiktok:
@@ -244,15 +146,16 @@ with tab_tiktok:
             if not tt_url or not tt_keyword:
                 st.warning("Vui lòng nhập cả URL TikTok và Keyword.")
             else:
-                with st.spinner("Đang tải, tạo phụ đề và phân tích AI... (Việc này có thể mất 1-2 phút)"):
+                with st.spinner("Đang tải..."):
                     try:
-                        # [SỬA] Thêm 'keyword' vào params
+                        # [SỬA]
                         params = {
                             "url": tt_url, 
                             "language": language,
-                            "keyword": tt_keyword 
+                            "keyword": tt_keyword,
+                            "target_sheet": "Source Phân tích Video" # <-- THÊM DÒNG NÀY
                         }
-                        res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300) # Tăng timeout
+                        res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
                         if res.status_code == 200:
                             data = res.json()
@@ -395,12 +298,14 @@ with tab_subtitle:
             if not tt_url or not tt_keyword:
                 st.warning("Vui lòng nhập cả URL TikTok và Keyword.")
             else:
-                with st.spinner("Đang tải, tạo phụ đề và phân tích AI... (Việc này có thể mất 1-2 phút)"):
+                with st.spinner("Đang tải..."):
                     try:
+                        # [SỬA]
                         params = {
                             "url": tt_url, 
                             "language": language,
-                            "keyword": tt_keyword 
+                            "keyword": tt_keyword,
+                            "target_sheet": "Source Chỉnh sửa Video" # <-- THÊM DÒNG NÀY
                         }
                         res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
