@@ -124,7 +124,7 @@ class ViralAnalyzeResp(BaseModel):
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     content_deliverables: Optional[ContentDeliverables] = None
-
+    ai_analysis: Optional[Dict[str, Any]] = None
 # ---------- HELPERS ----------
 # (Toàn bộ các hàm helpers từ _to_public_url đến _build_content_deliverables giữ nguyên)
 # (Bạn không cần thay đổi gì ở phần này)
@@ -464,7 +464,28 @@ def _build_content_deliverables(video_path: str,
         cta_comments=ctas,
         carousel_zip_url=None,
     )
+# [THÊM HÀM NÀY VÀO KHU VỰC HELPERS TRONG video.py]
 
+
+def _call_n8n_analysis_webhook(webhook_url: str, payload_dict: dict) -> Optional[Dict[str, Any]]:
+    """
+    Gọi webhook n8n CỤ THỂ để phân tích.
+    """
+    try:
+        print(f"Calling n8n analysis webhook: {webhook_url}")
+        
+        # Sử dụng webhook_url (tham số 1) và payload_dict (tham số 2)
+        res = requests.post(webhook_url, json=payload_dict, timeout=20) 
+        
+        if res.status_code == 200:
+            print("n8n analysis webhook call successful.")
+            return res.json() 
+        else:
+            print(f"LỖI n8n Webhook: {res.status_code} - {res.text}")
+            return None
+    except Exception as e:
+        print(f"LỖI khi gọi n8n webhook: {e}")
+        return None
 # [XÓA] Hàm _find_sheet_cell_coords không còn cần thiết
 # async def _find_sheet_cell_coords(...):
 #     ...
@@ -535,14 +556,17 @@ def download_and_analyze(url: HttpUrl):
 # === [SỬA ĐỔI LỚN] CẬP NHẬT viral_analyze ===
 # [THAY THẾ TOÀN BỘ HÀM NÀY TRONG app/routers/video.py]
 
+# [THAY THẾ TOÀN BỘ HÀM NÀY TRONG app/routers/video.py]
+
 @router.post("/viral-analyze", response_model=ViralAnalyzeResp)
 async def viral_analyze(
     url: HttpUrl,
     gc: AsyncioGspreadClient = Depends(get_sheet_client), 
     keyword: str = Query(..., description="Keyword do người dùng nhập"), 
+    target_sheet: str = Query(..., description="Tên của tab (sheet) để upload kết quả"),
     
     # [THÊM DÒNG NÀY]
-    target_sheet: str = Query(..., description="Tên của tab (sheet) để upload kết quả"),
+    n8n_webhook_url: Optional[str] = Query(None, description="Webhook n8n cụ thể để gọi"),
     
     audio_ext: str = Query(".mp3", pattern=r"^\.(mp3|wav)$"),
     language: Optional[str] = Query("vi", description="Ngôn ngữ (ví dụ: 'vi', 'en')"),
@@ -553,7 +577,8 @@ async def viral_analyze(
     - 2. Chạy Whisper để tạo phụ đề (all_segments).
     - 3. Gửi transcript cho AI (Gemini) để sửa lỗi và tìm highlights (ai_highlights).
     - 4. Thêm hàng mới (keyword, link, json, checkbox) vào sheet được chỉ định.
-    - 5. Trả về CẢ HAI danh sách cho frontend.
+    - 5. KÍCH HOẠT WEBHOOK N8N (SAU KHI UPLOAD SHEET).
+    - 6. Trả về CẢ HAI danh sách cho frontend.
     """
     
     # 1) Download và Extract Audio
@@ -566,14 +591,15 @@ async def viral_analyze(
     )
     audio_format = os.path.splitext(audio_path)[1].lstrip(".").lower()
 
-    # Chuẩn hóa URL để lưu trữ
     normalized_url_str = _normalize_tiktok_url(str(url))
 
-    # Khởi tạo các danh sách kết quả
     final_all_segments: List[SceneSegment] = []
     final_ai_highlights: List[SceneSegment] = []
     stats_all: Dict[str, float] = {}
     stats_ai: Dict[str, float] = {}
+    
+    # Khởi tạo biến kết quả n8n
+    n8n_analysis_results = None
 
     # === BẮT ĐẦU KHỐI TRY CHÍNH ===
     try:
@@ -581,34 +607,25 @@ async def viral_analyze(
         print(f"[viral_analyze] Bắt đầu transcribe (lang={language})...")
         with tempfile.TemporaryDirectory() as tmp:
             srt_path = os.path.join(tmp, "subs.srt")
-            
             raw_segments_tuples = await run_in_threadpool(
-                transcribe_to_srt,
-                video_path,
-                srt_path,
-                language=language
+                transcribe_to_srt, video_path, srt_path, language=language
             )
         
         if not raw_segments_tuples:
             raise Exception("Không thể tạo phụ đề (transcription). Video có thể không có lời thoại.")
 
-        # 4) LUÔN LUÔN xử lý 'all_segments'
+        # 4) Xử lý 'all_segments'
         for _, start, end, text in raw_segments_tuples:
             duration = round(end - start, 3)
             if duration < 0.1: continue
             final_all_segments.append(SceneSegment(
-                start_sec=start,
-                end_sec=end,
-                duration_sec=duration,
-                text=text.strip(),
-                reason=""
+                start_sec=start, end_sec=end, duration_sec=duration, text=text.strip(), reason=""
             ))
         stats_all = _scene_stats(final_all_segments)
 
         # 5) Format transcript cho AI
         raw_transcript_string = "\n".join(
-            f"[{s:.3f} --> {e:.3f}] {t.strip()}" 
-            for _, s, e, t in raw_segments_tuples
+            f"[{s:.3f} --> {e:.3f}] {t.strip()}" for _, s, e, t in raw_segments_tuples
         )
         print(f"[viral_analyze] Đã transcribe. Bắt đầu sửa lỗi AI...")
 
@@ -630,68 +647,76 @@ async def viral_analyze(
                 duration = round(ai_seg.end_sec - ai_seg.start_sec, 3)
                 if duration < 0.1: continue
                 final_ai_highlights.append(SceneSegment(
-                    start_sec=ai_seg.start_sec,
-                    end_sec=ai_seg.end_sec,
-                    duration_sec=duration,
-                    text=ai_seg.text,
-                    reason=ai_seg.reason
+                    start_sec=ai_seg.start_sec, end_sec=ai_seg.end_sec, duration_sec=duration, text=ai_seg.text, reason=ai_seg.reason
                 ))
             stats_ai = _scene_stats(final_ai_highlights)
         else:
             print("[viral_analyze] AI không tìm thấy highlights nào.")
         
-        # === [SỬA ĐỔI] EXPORT HÀNG MỚI VÀO SHEET ĐỘNG ===
-        try:
-            # 1. [SỬA] Dùng biến target_sheet được gửi từ frontend
-            TARGET_SHEET_TITLE = target_sheet 
+        
+        # === [SỬA] BƯỚC 4: EXPORT HÀNG MỚI VÀO SHEET ĐỘNG ===
+        
+        # 4.1. Chuẩn bị dữ liệu JSON (dùng cho cả Sheet và Webhook)
+        final_json_data = {
+            "all_segments": [s.model_dump() for s in final_all_segments],
+            "stats": {
+                "all_segments": stats_all
+            }
+        }
+        final_json_string = json.dumps(final_json_data, ensure_ascii=False)
             
+        try:
+            TARGET_SHEET_TITLE = target_sheet 
             print(f"[viral_analyze] Chuẩn bị export hàng mới vào sheet '{TARGET_SHEET_TITLE}'...")
             
             HEADER = ["keyword", "Link Video gốc", "subtitle video", "check box", "Remix Video Link"]
             CHECKBOX_COLUMN_NAME = "check box"
             
-            # 2. Gộp TẤT CẢ dữ liệu (theo yêu cầu trước) vào MỘT file JSON
-            final_json_data = {
-                "all_segments": [s.model_dump() for s in final_all_segments],
-                "stats": {
-                    "all_segments": stats_all
-                }
-            }
-            final_json_string = json.dumps(final_json_data, ensure_ascii=False)
-            
-            # 3. Chuẩn bị hàng dữ liệu
             new_row_data = [
                 keyword,
-                normalized_url_str, # Dùng URL đã chuẩn hóa
-                final_json_string,  # <-- JSON vào cột 'subtitle video'
-                "FALSE",            # <-- Giá trị ban đầu cho checkbox
-                ""                  # <-- Cột 'Remix Video Link' để trống
+                normalized_url_str,
+                final_json_string,
+                "FALSE",
+                ""
             ]
             
-            # 4. Gọi export_rows
             print(f"[viral_analyze] Đang append 1 hàng mới vào sheet: {TARGET_SHEET_TITLE}...")
             await export_rows(
                 gc=gc,
                 spreadsheet_id=SPREADSHEET_ID,
-                title=TARGET_SHEET_TITLE, # <-- Dùng biến động
+                title=TARGET_SHEET_TITLE,
                 rows=[new_row_data], 
                 header_row=HEADER,
                 checkbox_columns=[CHECKBOX_COLUMN_NAME]
             )
             print(f"[viral_analyze] Append hàng mới vào sheet thành công.")
 
-        # [SỬA] ĐÂY LÀ KHỐI BỊ THIẾU CỦA BẠN
         except Exception as e_sheet:
-            # Ghi lại lỗi sheet nhưng vẫn tiếp tục
             print(f"LỖI (Google Sheet Export): {e_sheet}")
         
         # === KẾT THÚC EXPORT GOOGLE SHEET ===
+
+        
+        # === [SỬA] BƯỚC 5: KÍCH HOẠT N8N WEBHOOK (SAU KHI UPLOAD SHEET) ===
+        if n8n_webhook_url:
+            try:
+                print(f"[viral_analyze] Đang kích hoạt n8n webhook (sau khi upload sheet): {n8n_webhook_url}")
+                n8n_analysis_results = await run_in_threadpool(
+                    _call_n8n_analysis_webhook,
+                    n8n_webhook_url, # <-- Truyền URL
+                    final_json_data  # Gửi dict 'final_json_data'
+                )
+            except Exception as e_webhook:
+                 print(f"LỖI (n8n Webhook Call): {e_webhook}")
+        else:
+            print("[viral_analyze] Không có n8n_webhook_url, bỏ qua cuộc gọi webhook.")
+        # ============================================
 
         # 9) Build 3.1 Content deliverables
         content_deliv = await run_in_threadpool(
             _build_content_deliverables,
             video_path=video_path,
-            source_url=str(url), # Trả về URL gốc cho frontend
+            source_url=str(url), 
             stats=stats_all 
         )
 
@@ -712,6 +737,8 @@ async def viral_analyze(
             video_url=_to_public_url(video_path),
             audio_url=_to_public_url(audio_path),
             content_deliverables=content_deliv,
+            
+            ai_analysis=n8n_analysis_results # Trả về kết quả n8n
         )
 
     # === KHỐI EXCEPT CHÍNH ===
@@ -730,4 +757,5 @@ async def viral_analyze(
             video_url=_to_public_url(video_path),
             audio_url=_to_public_url(audio_path),
             content_deliverables=None,
+            ai_analysis=None # Vẫn trả về None nếu lỗi
         )

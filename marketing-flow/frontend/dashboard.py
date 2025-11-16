@@ -110,27 +110,110 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
         st.error(f"Lỗi kết nối API: {e}")
         st.session_state[key] = not new_value
 
-# --- TẠO 5 TABS ---
-tab_mvp, tab_tiktok, tab_subtitle, tab_uploader, tab_dashboard = st.tabs([
-    "1. Phân tích URL (MVP)", 
-    "2. Phân tích TikTok", 
-    "3. Tạo Phụ đề Tự động",
-    "4. Đăng tải Đa nền tảng",
-    "5. Báo cáo Hiệu suất" 
+
+# --- [MỚI] HÀM HIỂN THỊ PHÂN TÍCH TỪ N8N ---
+def render_n8n_analysis(analysis_data):
+    """
+    Hiển thị kết quả phân tích AI (dưới dạng một chuỗi lớn) từ n8n.
+    """
+    if not isinstance(analysis_data, dict):
+        st.caption("Không có dữ liệu phân tích AI (n8n).")
+        return
+    
+    # [SỬA] Tìm key chứa chuỗi phân tích.
+    # Thử tìm "Phân tích video" (tiếng Việt) hoặc "analysis" (tiếng Anh)
+    analysis_key = None
+    if "Phân tích video" in analysis_data:
+        analysis_key = "Phân tích video"
+    elif "analysis" in analysis_data:
+        analysis_key = "analysis"
+        
+    # Lấy nội dung
+    analysis_content = analysis_data.get(analysis_key) if analysis_key else None
+
+    with st.container(border=True):
+        st.subheader("🤖 Phân tích AI (từ n8n)")
+        
+        if analysis_content and isinstance(analysis_content, str):
+            # [SỬA] Hiển thị trực tiếp chuỗi (string) vì nó đã được định dạng sẵn
+            st.markdown(analysis_content)
+        
+        else:
+             # Nếu không tìm thấy key hoặc key không phải là string
+             st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu phân tích hợp lệ.")
+             with st.expander("Xem dữ liệu thô từ n8n (để gỡ lỗi)"):
+                st.json(analysis_data)
+
+
+# [THAY THẾ HÀM NÀY TRONG dashboard.py]
+
+def render_n8n_captions(analysis_data):
+    """Hiển thị Title và Captions (Tool 2) từ n8n."""
+    if not isinstance(analysis_data, dict):
+        st.caption("Không có dữ liệu phân tích AI (n8n).")
+        return
+
+    # Hàm helper tìm key không phân biệt chữ hoa/thường/dấu cách/gạch dưới
+    def find_key(data_dict, potential_keys):
+        for key in data_dict:
+            normalized_key = str(key).lower().replace(" ", "").replace("_", "")
+            if normalized_key in potential_keys:
+                return data_dict[key]
+        return None
+
+    # Tìm các giá trị
+    title = find_key(analysis_data, ["title", "tiêuđề"])
+    caption_fb = find_key(analysis_data, ["captionfacebook", "caption_facebook", "captionfb"])
+    caption_ig = find_key(analysis_data, ["captioninstagram", "caption_instagram", "captionig"])
+    
+    has_valid_data = (title or caption_fb or caption_ig)
+
+    with st.container(border=True):
+        st.subheader("🤖 Phân tích AI (từ n8n)")
+        
+        if not has_valid_data:
+             st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu Title/Caption.")
+        else:
+            
+            # --- [SỬA ĐỔI] Dùng st.container + st.caption + st.markdown ---
+            # --- thay vì st.text_input(disabled=True) ---
+            
+            if title:
+                with st.container(border=True):
+                    st.caption("Tiêu đề (Title)")
+                    st.markdown(title)
+            
+            if caption_fb:
+                with st.container(border=True):
+                    st.caption("Caption Facebook")
+                    st.markdown(caption_fb)
+            
+            if caption_ig:
+                with st.container(border=True):
+                    st.caption("Caption Instagram")
+                    st.markdown(caption_ig)
+
+
+# --- TẠO 4 TABS (ĐÃ BỎ TAB MVP) ---
+tab_tiktok, tab_subtitle, tab_uploader, tab_dashboard = st.tabs([
+    "1. Phân tích Video Tiktok", 
+    "2. Chỉnh sửa Video",
+    "3. Đăng tải Đa nền tảng",
+    "4. Báo cáo Hiệu suất" 
 ])
 
 # ==========================================================
-# ===== TÍNH NĂNG 2: PHÂN TÍCH TIKTOK (ĐÃ CẬP NHẬT) =====
+# ===== TÍNH NĂNG 1: PHÂN TÍCH TIKTOK  =====
 # ==========================================================
 with tab_tiktok:
-    # === CĂN GIỮA TOÀN BỘ TAB 2 ===
+    # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("Phân tích Video TikTok")
         
         # [SỬA] Thêm ô nhập Keyword
         tt_url = st.text_input("Dán URL video TikTok", key="tt_url")
-        tt_keyword = st.text_input("Nhập Keyword (Bắt buộc)", key="tt_keyword")
+        tt_keyword = st.text_input("Nhập Keyword", key="tt_keyword")
         
         language = st.selectbox(
             "Chọn ngôn ngữ của video",
@@ -140,7 +223,7 @@ with tab_tiktok:
             key="tt_lang"
         )
         
-        if st.button("Phân tích TikTok"):
+        if st.button("Phân tích Video"):
             
             # [SỬA] Thêm kiểm tra validation
             if not tt_url or not tt_keyword:
@@ -153,7 +236,8 @@ with tab_tiktok:
                             "url": tt_url, 
                             "language": language,
                             "keyword": tt_keyword,
-                            "target_sheet": "Source Phân tích Video" # <-- THÊM DÒNG NÀY
+                            "target_sheet": "Source Phân tích Video",
+                            "n8n_webhook_url": "https://partible-terese-homocercal.ngrok-free.dev/webhook/a7b4c66d-f180-4439-a36d-96bce1e27bd0"
                         }
                         res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
@@ -167,7 +251,7 @@ with tab_tiktok:
                             st.session_state.pop('tt_analysis_result', None)
 
                     except requests.exceptions.ReadTimeout:
-                         st.error("Lỗi: Yêu cầu hết thời gian (Timeout). Tác vụ phân tích này tốn nhiều thời gian hơn dự kiến. Vui lòng thử lại với video ngắn hơn.")
+                        st.error("Lỗi: Yêu cầu hết thời gian (Timeout). Tác vụ phân tích này tốn nhiều thời gian hơn dự kiến. Vui lòng thử lại với video ngắn hơn.")
                     except Exception as e:
                         st.error(f"Lỗi kết nối: {e}")
                         st.session_state.pop('tt_analysis_result', None)
@@ -177,100 +261,45 @@ with tab_tiktok:
             data = st.session_state['tt_analysis_result']
             
             st.subheader("Kết quả phân tích")
-
-            # (Phần code hiển thị video, audio, stats, CTA, và 2 bảng dữ liệu)
-            # (GIỮ NGUYÊN TỪ ĐÂY ĐẾN HẾT TAB 2)
             
             source_url = data.get('source_url')
             if source_url:
                 st.caption(f"Nguồn: {source_url}")
             
             video_url = data.get('video_url')
-            audio_url = data.get('audio_url')
             
             if video_url:
+                # --- [SỬA LỖI] Khôi phục code định nghĩa video_html ---
                 video_url_full = f"{API_URL}{video_url}"
                 video_html = f"""
                 <div class="video-wrapper-16_9">
-                    <video controls autoplay playsinline>
+                    <video controls>
                         <source src="{video_url_full}" type="video/mp4">
                         Trình duyệt của bạn không hỗ trợ video này.
                     </video>
                 </div>
                 """
                 st.markdown(video_html, unsafe_allow_html=True)
-
-            if audio_url:
-                st.audio(f"{API_URL}{audio_url}")
-
-            st.divider() 
+                # --- HẾT SỬA LỖI ---
             
-            data_col1, data_col2 = st.columns(2)
-            
-            with data_col1:
-                stats_all = data.get('all_segments_stats', {})
-                if stats_all:
-                    st.subheader("📊 Thống kê (Toàn bộ Phụ đề)")
-                    st.metric("Tổng số Phân đoạn (Sub)", f"{int(stats_all.get('count', 0))}")
-                    st.metric("TB (giây)", f"{stats_all.get('mean', 0):.2f}s")
-                    st.metric("Ngắn nhất", f"{stats_all.get('shortest', 0):.2f}s")
-                    st.metric("Dài nhất", f"{stats_all.get('longest', 0):.2f}s")
+            # === [MỚI] HIỂN THỊ PHÂN TÍCH N8N ===
+            ai_analysis = data.get('ai_analysis')
+            if ai_analysis:
+                render_n8n_analysis(ai_analysis)
+            # =======================================
 
-            with data_col2:
-                # [SỬA LỖI] Xử lý 'None' an toàn
-                ctas = (data.get('content_deliverables') or {}).get('cta_comments', [])
-                if ctas:
-                    st.subheader("💬 Gợi ý CTA")
-                    for cta in ctas:
-                        st.markdown(f"- {cta}")
-                else:
-                    st.subheader("💬 Gợi ý CTA")
-                    st.caption("Không có gợi ý CTA.")
-            
             st.divider()
-
-            # 1. Bảng Toàn bộ Phụ đề (LUÔN HIỂN THỊ)
-            st.subheader("🎬 Toàn bộ Phụ đề của Video")
-            all_segments_data = data.get('all_segments', [])
             
-            if not all_segments_data:
-                st.info("Không có dữ liệu phân đoạn (phụ đề) nào được tìm thấy.")
-            else:
-                st.dataframe(all_segments_data, height=300, use_container_width=True)
 
-            # 2. Highlights do AI chọn (Hiển thị BÊN DƯỚI bảng)
-            st.subheader("🤖 Highlights do AI chọn")
-            ai_highlights_data = data.get('ai_highlights', [])
-
-            if not ai_highlights_data:
-                st.info("AI không tìm thấy highlights nào đáng chú ý.")
-            else:
-                st.caption(f"AI đã phân tích và chọn ra {len(ai_highlights_data)} đoạn hay nhất.")
-                
-                for i, scene in enumerate(ai_highlights_data):
-                    start_time = scene.get('start_sec', 0.0)
-                    end_time = scene.get('end_sec', 0.0)
-                    reason = scene.get('reason', 'Không có lý do')
-                    text = scene.get('text', 'Không có nội dung')
-                    
-                    start_m, start_s = divmod(start_time, 60)
-                    end_m, end_s = divmod(end_time, 60)
-                    timestamp = f"[{int(start_m):02d}:{start_s:04.1f} -> {int(end_m):02d}:{end_s:04.1f}]"
-
-                    expander_title = f"**{i+1}. {reason}** ({timestamp})"
-                    
-                    with st.expander(expander_title):
-                        st.markdown(f"**Nội dung:**")
-                        st.write(text)
 
 # ==========================================================
-# ===== TÍNH NĂNG 3: TẠO PHỤ ĐỀ (POLLING) =====
+# ===== TÍNH NĂNG 2: CHỈNH SỬA VIDEO  =====
 # ==========================================================
 with tab_subtitle:
-    # === CĂN GIỮA TOÀN BỘ TAB 3 ===
+    # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
-        st.header("Công cụ Phân tích & Remix Video")
+        st.header("Công cụ chỉnh sửa Video")
 
         # --- BƯỚC 1: PHÂN TÍCH (Giống Tool 2) ---
         st.subheader("Bước 1: Phân tích Video")
@@ -291,7 +320,7 @@ with tab_subtitle:
             key="remix_lang"
         )
         
-        if st.button("Phân tích Video"):
+        if st.button("Tải Video"):
             st.session_state.tt_analysis_done = False
             st.session_state.tt_analysis_results = {}
             
@@ -305,7 +334,8 @@ with tab_subtitle:
                             "url": tt_url, 
                             "language": language,
                             "keyword": tt_keyword,
-                            "target_sheet": "Source Chỉnh sửa Video" # <-- THÊM DÒNG NÀY
+                            "target_sheet": "Source Chỉnh sửa Video",
+                            "n8n_webhook_url": "https://partible-terese-homocercal.ngrok-free.dev/webhook/ac438374-32a4-4f72-9043-a9971d21fe8c"
                         }
                         res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
@@ -318,7 +348,7 @@ with tab_subtitle:
                             st.error(f"Lỗi API: {res.text}")
 
                     except requests.exceptions.ReadTimeout:
-                         st.error("Lỗi: Yêu cầu hết thời gian (Timeout).")
+                        st.error("Lỗi: Yêu cầu hết thời gian (Timeout).")
                     except Exception as e:
                         st.error(f"Lỗi kết nối: {e}")
 
@@ -336,14 +366,19 @@ with tab_subtitle:
                 video_url_full = f"{API_URL}{video_url}"
                 video_html = f"""
                 <div class="video-wrapper-16_9">
-                    <video controls autoplay playsinline key="{data.get('video_path')}">
+                    <video controls key="{data.get('video_path')}">
                         <source src="{video_url_full}" type="video/mp4">
                     </video>
                 </div>
                 """
                 st.markdown(video_html, unsafe_allow_html=True)
+
+            ai_analysis = data.get('ai_analysis')
+            if ai_analysis:
+                render_n8n_captions(ai_analysis) # <-- Gọi hàm mới
+            # [KẾT THÚC THÊM]
             
-            st.divider() 
+            st.divider()
 
             st.subheader("🎬 Toàn bộ Phụ đề của Video")
             all_segments_data = data.get('all_segments', [])
@@ -403,7 +438,7 @@ with tab_subtitle:
             with col1:
                 remix_burn_in = st.checkbox("Ghi đè phụ đề (Hard sub)", value=True, key="remix_burn_in")
             with col2:
-                remix_flip_video = st.checkbox("Lật video (Flip)", value=False, key="remix_flip")
+                remix_flip_video = st.checkbox("Lật video (Chỉ dùng cho video không có chữ)", value=False, key="remix_flip")
             
             if st.button("Tạo video cuối cùng"):
                 if not source_video_path:
@@ -472,7 +507,7 @@ with tab_subtitle:
                                     
                                     final_video_html = f"""
                                     <div class="video-wrapper-16_9">
-                                        <video controls autoplay playsinline>
+                                        <video controls >
                                             <source src="{final_url}" type="video/mp4">
                                         </video>
                                     </div>
@@ -484,10 +519,10 @@ with tab_subtitle:
                         st.error(f"Lỗi nghiêm trọng: {e}")
                         
 # ==========================================================
-# ===== TÍNH NĂNG 4: ĐĂNG TẢI (SHEET) =====
+# ===== TÍNH NĂNG 3: ĐĂNG TẢI (TRƯỚC LÀ TAB 4) =====
 # ==========================================================
 with tab_uploader:
-    # === CĂN GIỮA TOÀN BỘ TAB 4 ===
+    # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("Công cụ Đăng tải Đa nền tảng")
@@ -509,8 +544,8 @@ with tab_uploader:
                 header_row_index = -1
                 headers = []
                 
-                LOOKUP_COL_1 = "link video gốc"
-                LOOKUP_COL_2 = "title (nội dung chính)" 
+                LOOKUP_COL_1 = "keyword"
+                LOOKUP_COL_2 = "link video gốc" 
 
                 for i, row in enumerate(all_data):
                     if not row: continue
@@ -529,7 +564,7 @@ with tab_uploader:
                 cleaned_header_map = {str(h).strip().lower(): idx for idx, h in enumerate(headers)}
 
                 try:
-                    IDX_TITLE = cleaned_header_map[LOOKUP_COL_2]
+                    IDX_TITLE = cleaned_header_map[LOOKUP_COL_1]
                     IDX_FB_CHECK = cleaned_header_map["facebook"]
                     IDX_IG_CHECK = cleaned_header_map["ig"]
                     IDX_READY_CHECK = cleaned_header_map["ready"]
@@ -605,10 +640,10 @@ with tab_uploader:
                             st.caption("Chưa có link")
 
 # ==========================================================
-# ===== TÍNH NĂNG 5: BÁO CÁO (PURE STREAMLIT) =====
+# ===== TÍNH NĂNG 4: BÁO CÁO (TRƯỚC LÀ TAB 5) =====
 # ==========================================================
 with tab_dashboard:
-    # === CĂN GIỮA TOÀN BỘ TAB 5 ===
+    # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("🎬 Báo cáo Hiệu suất Video")

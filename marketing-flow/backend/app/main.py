@@ -9,14 +9,13 @@ from typing import Optional, Dict
 from dotenv import load_dotenv
 load_dotenv()
 
-# [SỬA] Di chuyển các import lên đầu
 import json
 import asyncio
-from app.services.sheets import export_rows
+import re # <-- THÊM IMPORT
+from app.services.sheets import export_rows, read_sheet_data, update_sheet_cell # <-- THÊM IMPORT
 from gspread_asyncio import AsyncioGspreadClient
 from app.media import remix_video_by_scenes, SceneSegment
 from app.routers.video import SPREADSHEET_ID
-# ------------------------------------
 
 # 1. Imports
 from fastapi import (
@@ -30,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 # --- THÊM: Imports cho Lifespan (Google Sheets) ---
 from contextlib import asynccontextmanager
 from app.services.sheets import _get_async_client_manager
-from app.dependencies import get_sheet_client # <-- ĐÃ THÊM
+from app.dependencies import get_sheet_client 
 # ---------------------------------------------------
 
 # --- IMPORT CHỨC NĂNG TỪ MEDIA ---
@@ -44,7 +43,6 @@ from app.routers.video import _to_public_url
 # ---- 3. THÊM: Định nghĩa Lifespan cho Google Sheets ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Khởi động Server ---
     print("Server đang khởi động...")
     print("Đang xác thực Google Sheet Client...")
     try:
@@ -58,7 +56,6 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # --- Tắt Server ---
     print("Server đang tắt.")
 # ------------------------------------------------------
 
@@ -95,7 +92,6 @@ async def run_video_job(
         if flip_video:
             flipped_path = str(temp_workdir / "flipped.mp4")
             try:
-                # [SỬA] Dùng run_in_threadpool cho hàm blocking
                 await run_in_threadpool(flip_video_horizontal, temp_video_path, flipped_path, do_upload=False)
                 video_to_process = flipped_path
             except Exception as e:
@@ -103,7 +99,6 @@ async def run_video_job(
                 shutil.rmtree(temp_workdir)
                 return
         
-        # [SỬA] Dùng run_in_threadpool cho hàm blocking
         final_path_str = await run_in_threadpool(
             auto_subtitle_and_bgm,
             video_path=video_to_process,
@@ -123,7 +118,74 @@ async def run_video_job(
             shutil.rmtree(temp_workdir)
 
 # --- CÁC HÀM HELPER MỚI (CHO Tool 3 MỚI) ---
-# [SỬA] Đảm bảo hàm này được định nghĩa TRƯỚC run_remix_job
+
+# [THÊM MỚI] Hàm chuẩn hóa URL (sao chép từ video.py)
+def _normalize_tiktok_url_main(url: str) -> str:
+    """
+    Helper function copied from video.py to normalize URLs.
+    """
+    if not url: return ""
+    # Get URL before any query parameters
+    url_no_params = url.split('?')[0]
+    return url_no_params
+
+# [THÊM MỚI] Hàm tìm tọa độ ô
+async def _find_sheet_cell_coords_main(
+    gc: AsyncioGspreadClient,
+    sheet_title: str,
+    lookup_url: str, # Đây là URL đã được chuẩn hóa
+    target_col_name: str,
+    url_col_name: str = "Link Video gốc"
+) -> (Optional[int], Optional[int]):
+    """
+    Tìm (Hàng, Cột) 1-based để cập nhật, dựa trên URL đã được chuẩn hóa.
+    """
+    try:
+        data = await read_sheet_data(gc, SPREADSHEET_ID, sheet_title)
+        
+        if not data:
+            print(f"[main.py] Sheet '{sheet_title}' trống.")
+            return None, None
+        
+        headers = [str(h).strip().lower() for h in data[0]]
+        
+        try:
+            url_col_idx = headers.index(url_col_name.lower())
+        except ValueError:
+            print(f"[main.py] LỖI: Không tìm thấy cột URL '{url_col_name}' in sheet '{sheet_title}'.")
+            return None, None
+            
+        try:
+            target_col_idx = headers.index(target_col_name.lower())
+        except ValueError:
+            print(f"[main.py] LỖI: Không tìm thấy cột Target '{target_col_name}' in sheet '{sheet_title}'.")
+            return None, None
+
+        # Lặp qua dữ liệu (bỏ qua header) để tìm URL
+        for i, row in enumerate(data[1:]):
+            if not row or len(row) <= url_col_idx:
+                continue
+                
+            sheet_url_raw = row[url_col_idx]
+            if not sheet_url_raw:
+                continue
+            
+            sheet_url_normalized = _normalize_tiktok_url_main(sheet_url_raw)
+            
+            if sheet_url_normalized == lookup_url: 
+                target_row = i + 2  # +1 vì bỏ qua header, +1 vì gspread 1-based
+                target_col = target_col_idx + 1 # +1 vì gspread 1-based
+                return target_row, target_col
+                
+        print(f"[main.py] CẢNH BÁO: Không tìm thấy URL '{lookup_url}' in column '{url_col_name}'.")
+        return None, None
+
+    except Exception as e:
+        print(f"[main.py] Lỗi khi đọc/tìm kiếm sheet '{sheet_title}': {e}")
+        return None, None
+
+
+# [SỬA ĐỔI] Hàm upload (để tìm và cập nhật, thay vì append)
 async def _upload_and_update_remix_sheet(
     gc: AsyncioGspreadClient,
     local_file_path: str,
@@ -131,40 +193,47 @@ async def _upload_and_update_remix_sheet(
     source_url: str
 ) -> str:
     """
-    Tải file lên Dropbox và cập nhật sheet "Source Chỉnh sửa Video".
+    Tải file lên Dropbox và CẬP NHẬT sheet "Source Chỉnh sửa Video".
     Trả về link Dropbox.
     """
     SHEET_TITLE = "Source Chỉnh sửa Video"
-    HEADER = ["keyword", "Link Video gốc", "subtitle video", "check box", "Remix Video Link"]
-    CHECKBOX_COLUMN = "check box"
+    URL_COLUMN = "Link Video gốc"
+    TARGET_COLUMN = "Remix Video Link"
     
     # 1. Tải lên Dropbox
     dropbox_url = upload_to_dropbox(local_file_path)
     print(f"Đã tải lên Dropbox: {dropbox_url}")
     
-    # 2. Chuẩn bị hàng dữ liệu mới
-    new_row = [
-        keyword,
-        source_url,
-        "", # Cột subtitle video (JSON) - để trống
-        "FALSE", # Checkbox
-        dropbox_url # Link Dropbox
-    ]
+    # 2. Chuẩn bị tìm kiếm
+    normalized_lookup_url = _normalize_tiktok_url_main(source_url)
     
-    # 3. Thêm hàng vào Google Sheet
-    await export_rows(
-        gc=gc,
-        spreadsheet_id=SPREADSHEET_ID,
-        title=SHEET_TITLE,
-        rows=[new_row],
-        header_row=HEADER,
-        checkbox_columns=[CHECKBOX_COLUMN]
+    # 3. Tìm ô cần cập nhật
+    (target_row, target_col) = await _find_sheet_cell_coords_main(
+        gc,
+        SHEET_TITLE,
+        normalized_lookup_url,
+        TARGET_COLUMN,
+        URL_COLUMN
     )
-    print(f"Đã cập nhật sheet '{SHEET_TITLE}' với link Dropbox.")
+    
+    # 4. Cập nhật ô nếu tìm thấy
+    if target_row and target_col:
+        print(f"[main.py] Đang cập nhật sheet '{SHEET_TITLE}' tại ô (R{target_row}, C{target_col})...")
+        await update_sheet_cell(
+            gc,
+            SPREADSHEET_ID,
+            SHEET_TITLE,
+            target_row,
+            target_col,
+            dropbox_url # <-- Đặt link Dropbox vào ô
+        )
+        print(f"[main.py] Cập nhật link Dropbox vào sheet thành công.")
+    else:
+        print(f"[main.py] CẢNH BÁO: Không tìm thấy hàng cho URL '{normalized_lookup_url}' trong sheet '{SHEET_TITLE}'. Không thể cập nhật link Dropbox.")
+
     return dropbox_url
 
 
-# [SỬA] Đã chuyển sang ASYNC
 async def run_remix_job(
     job_id: str,
     gc: AsyncioGspreadClient, 
@@ -244,7 +313,6 @@ async def run_remix_job(
         # --- BƯỚC 4: UPLOAD VÀ CẬP NHẬT SHEET ---
         print(f"[{job_id}] Bắt đầu Upload và cập nhật Sheet...")
         
-        # [SỬA] Gọi await trực tiếp, không dùng asyncio.run()
         await _upload_and_update_remix_sheet(
             gc=gc,
             local_file_path=final_output_path,
@@ -408,7 +476,7 @@ async def process_remix_video(
                     await run_in_threadpool(shutil.copyfileobj, bgm.file, f)
             finally:
                 await bgm.close()
-            bgm_path_str = str(bgm_path)
+            bgm_path_str = str(bgm_path) # <-- LỖI TYPO CŨ VẪN CÒN
             
         if not os.path.exists(source_video_path):
              raise HTTPException(status_code=404, detail=f"Source video path not found: {source_video_path}")

@@ -405,7 +405,7 @@ def append_dropbox_link_to_sheet(sheet_id: str, dropbox_link: str, column_name: 
     print(f"✅ Added Dropbox link to sheet at row {next_row}, column '{column_name}'.")
 
 # Hardcode your Dropbox access token
-DROPBOX_ACCESS_TOKEN = "sl.u.AGEaHerWYHaugzcWfmAudAzhzWjrBL0mg_8Bqqmp-JJglGRzq7oQTtExpVLwbknBU4c1Zh1k4gn1OnGvLIRBskumuyso_6JnkAkOxs7UWU8sh3F0a3xNti2MFU6XF0fFNvI5Y6UPU5t5w8BSemoFI9-KQJukiuLsjWDteoWLaP_2-lBFuTHMYl2cupDLpP8JaBb-739pUg7_UQ0jyZqlYsIahn29GMh_LnS8dH6nuzgHR2vy5Wz5_PE-o5R59b9wbKoDOpN_BH9WYbu8EpRxx1rgRpAAFlUTabyrdLXFg819p2iC_X6yCdQORAj5fQ_HFPzaLFGOHmXuvXn2yxZsvtqhFfA5YqSN7oiKQkyexPKsvrOlsIDwscp_CtR_xw_bQWspeNmhj7FLHa8lC0RRK7-H9jg805bOgTnRRI2bS97dEcAar3KAeWEffI6InBrvqBnIGqJDmaRGlslj5dLO2Sjg1tlougH2icfwy5cLjWnOx-ovU1asbFv3XY9BjgxhaSsnNAH7kbc78ZErzIJp06xYh5IU28wK0ydK0iDf-oWQIXAhlBZw332NW5sskCvnSYM3zNvus6nOfGjew7y_cwsIT3S_1hSbH1jLctVHs22YDn79SMB2UN5PXEuYA2q_HBVn4K-SSF4RQVtrjfGCiM-iCayHZZP3imepx4BQYePCmEsr-efSxK4gn3ufQ8OJ78Nk99GlUxPNs5rivaCX-zC6JwVZ3H9PPvKYLvxHs0518KtWYW_DMDoChGZKK07wo96E0sXkU7CL0nfVeJw_caknTIcJBYyE1TIMoD8W16augPPhF-gCZrV3a9oPaEm_Db77KSHdKoHXjjW0IYBT43qcbCNt1N9vySxX12Iq0twCcQPAKuIM2Cxg6APNIenrY444UGsH4IXd2ef-DJY7rrPydJeawYE879RafQAhdGr92-NdwgxdbFhGNApTipwAWg7I72WXmchT98X_f8XwPvE6CpHVhsS9HUkvvgAU4l3-tNQDWMl3mK13qY3Szl1oa-bQj9dF9CGjj9K38sbwXteEMcghrHq5SqdCZMxC_Yv-ErzrfDH3q10xagbmPQARUhfndwHLMIcHvqP8XzXRmHhYa2xHWm2Ayrruwhn0hLOUHUTNDR_f3Y1MiIK7moxuhfYJX0rhyZ-upzicLl5-zFbzy_ATu-jooaRDwYT_ylrmV9AILaoV8QjEc2okzlLa-P6O0JVN5ELpp9ndFzFXi-3vXCe-vLkDD4JEyoLTCbidF64yTWM6Xz8J-JdYA1nTFab1y8pvyCy7Q4RUSrAsskcW6Yb5Wos9lky-_2NbYSIH-DcAsWpRH5PV2CqQf7KYxCb8kzYblssacliMjwXTj6CFcARB5WjprevAbiuFgC3m6601tADqOnjae8Na2mzkLZZmvNLwBGC9eFKyHasrMAhd"
+DROPBOX_ACCESS_TOKEN = "sl.u.AGHJgBIiFfgOPU2IHxVQWkd7uQAAmrnMSGXpZR7xnv9u3VZCpB40mfPNfzmE6phA01VKntdF9k5gDruMFh7uV7JJg0IImZRPlJv-IjpRJiGTv4zeMuwRvT-teXZ8Yo26AsOqgZZlqHn_z7ohMmhNDqZ1tageKgtzyifhPLntS8ocNpLy06hy5bu0IqJcuZ60Gg58i9heIkf_HIUhV1QkZOOmrMOts5a3MzGatbtjBfu246t0Kz3xz-O5Oy6XZ3q_6EbCEUyLJ_9q0OYh-iYZUYWuoVnANs9fK7QNX4HaRKDOEmGixHPi8Dkk7AkIU6THdOEwRvbJppMFue8mWDzze6sEKJdMX_Kw3kqbRHzlbwuL2rVBFgpwiQv-pzNDFnpoQFZx_aX_G7tnuxrlfk1AHUn7O-N4TJaPcYPuXS7TT1kmXWFSUlrX9qVDZTH9z4N-ArlAmHnbPX_38nbd4RDXZ1v349s046jhIdpPsnDDWdcUDKxCC-Dl4Oo3kNBBzLNqdz8f1nKPp8kYSNsFd6Cr2kLGLarBWKtbXdriD1Dis5z8Y5vq_B2MfgmSUjAaqNs3Um4vHYKnEcnM-QRxySQcVQeaiSKbkZXLnlscoVyAmHOPZRt9KMI3G9lDdGWn8ilMnXOH5vPyYM9r89jVeyMVDp9CO24NqnDDKQwzeuCyJxMsYult0dkyLJlsB2BswWuHgF2oThQrEasGW2DvEWG6J0V7QW_5lR-HVjFBxF29ZwL9InxE3zKfPeM8zQWuVH_ummKw9IovWGBM-q1D0sxP8fboUscCn0u7zxj5FcXfMSZOR39huWaVENJfK1E_PB5EFhdjqjD_7EnImu3UMC6Uhq1lzfYhQ-5zyQ0tuMwTwW3rJLjmBVTJrQYPaztJIPRyjaLpLo3BWwK_uocYQ_8f1wsvWjw3esxbL9zr9GRVQTkbJEF6kI8aBPh2e9bUnIQi-cJiRlwjygThPuXqy6osn4RNtix_7tIdeYmnrH160ntsBzVpyyoBeN_NKVgJ7fz6i-qgqsziiYYiIGLTGLp21z0595jHITYIJoqI0MkaiDvwQJsatv0M6nYmO6rZ8fYe3YenhncbebDPjprUc0x3MpXbd9mot2esSHLRelsz8ZmPb10M4Qzx4CdrZAgKPfdEBStV2_oQddxLWGgB46O0mcDMtOxktuPaDk-BEQjmyxcXGxtlqxD4k7u5G-_Vyi3oiaoZccO_sasb-woBJ4YGa2Y2JMQ90uUb999ik6IJgOx8kRHZp2DYh3I_8f4goYa28lBaoK4papdty_cDbRJcCR7xiWSgxjCmthKYimgaOq7YRYPuSsHHILBhHpmUFplmSLMwvX7bsdpP_slYH_FWsnPl6T4zMwJNt4Tf_XVNcw2Wiwzy9QZ3zU_VsKtTSbzH5SMXKSk8NomrE6GuhcV_wf8S"
 DROPBOX_UPLOAD_PATH = "/Videos"  # Path in your Dropbox where files will be uploaded
 
 dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
@@ -435,14 +435,13 @@ def auto_subtitle_and_bgm(
     burn_in: bool = True,
     crf: int = 18,
     preset: str = "medium",
-    subtitle_style: str = "",
-    initial_bgm_gain: float = 0.35,
+    initial_bgm_gain: float = 0.20, # <-- Giữ nguyên 0.20 (hoặc 0.35 tùy bạn)
     duck_threshold: float = 0.05,
     duck_ratio: float = 12.0,
     duck_attack_ms: int = 5,
     duck_release_ms: int = 250,
     remove_original_audio: bool = False,
-    flip_video: bool = False, # <-- ĐÃ THÊM THAM SỐ LẬT VIDEO
+    flip_video: bool = False,
     do_upload: bool = True
 ) -> str:
     """Generate subtitles and optionally mix or replace background music."""
@@ -454,25 +453,22 @@ def auto_subtitle_and_bgm(
 
     with tempfile.TemporaryDirectory() as tmp:
         # --- Validate / repair ---
+        # (Toàn bộ khối 'Validate / repair' giữ nguyên)
         file_ok = Path(video_path).exists() and Path(video_path).stat().st_size > 0
         if not file_ok:
             raise RuntimeError("Downloaded file is empty or missing.")
         if _looks_like_html(video_path):
             raise RuntimeError("Downloaded file appears to be HTML (not media).")
-
         v_has_video = has_video(video_path)
         v_has_audio = has_audio(video_path)
-
         if not (v_has_video or v_has_audio):
             repaired = str(Path(tmp) / "rewrap.mp4")
             if try_rewrap_mp4(video_path, repaired):
                 video_path = repaired
                 v_has_video = has_video(video_path)
                 v_has_audio = has_audio(video_path)
-
         if not (v_has_video or v_has_audio):
             raise RuntimeError("Input has no detectable streams.")
-
         if not v_has_video and v_has_audio:
             synth_path = str(Path(tmp) / "av_input.mp4")
             synthesize_black_video_with_audio(video_path, synth_path)
@@ -488,26 +484,28 @@ def auto_subtitle_and_bgm(
         srt_path = str(Path(tmp) / "subs.srt")
         cues = transcribe_to_srt(video_path, srt_path, language=language)
 
-        # --- Build ASS subtitles ---
-        vw, vh = ffprobe_size(video_path)
-        dyn_font = max(28, min(48, int(round(vh * 0.040))))
-        dyn_margin_v = max(80, int(round(vh * 0.09)))
-        dyn_margin_h = max(40, int(round(vw * 0.05)))
+        # --- Build ASS subtitles (for hardsub) ---
         ass_path = str(Path(tmp) / "subs.ass")
-        write_ass(
-            cues, ass_path,
-            fontsize=dyn_font, margin_v=dyn_margin_v, margin_h=dyn_margin_h,
-            primary="&H00FFFF00&",
-            outlinecol="&H00000000&",
-            backcol="&H50000000&",
-            outline=3
-        )
+        if burn_in:
+            vw, vh = ffprobe_size(video_path)
+            dyn_font = max(28, min(48, int(round(vh * 0.040))))
+            dyn_margin_v = max(80, int(round(vh * 0.09)))
+            dyn_margin_h = max(40, int(round(vw * 0.05)))
+            write_ass(
+                cues, ass_path,
+                fontsize=dyn_font, margin_v=dyn_margin_v, margin_h=dyn_margin_h,
+                primary="&H00FFFF00&",
+                outlinecol="&H00000000&",
+                backcol="&H50000000&",
+                outline=3
+            )
 
-        # --- Prepare inputs ---
+        # === PHẦN SỬA LỖI BẮT ĐẦU TỪ ĐÂY ===
+        
+        # --- [A] XÂY DỰNG INPUTS ---
         cmd = [get_ffmpeg_bin(), "-y", "-loglevel", "error", "-stats", "-i", video_path]
 
         used_bgm = False
-        bgm_is_looped = False
         vid_dur = ffprobe_duration(video_path)
 
         if bgm_path:
@@ -523,11 +521,16 @@ def auto_subtitle_and_bgm(
             else:
                 cmd += ["-i", bgm_path]
             used_bgm = True
+            
+        # [SỬA] Thêm input subtitle (nếu là softsub) NGAY BÂY GIỜ
+        if not burn_in:
+            cmd += ["-i", srt_path]
 
+        # --- [B] XÂY DỰNG FILTER_COMPLEX (Audio + Video Filters) ---
         filter_complex_parts = []
         out_audio_label: Optional[str] = None
-
-        # --- AUDIO LOGIC ---
+        
+        # Audio logic (Giữ nguyên, chỉ sửa `volume=1` thành `volume=1.5`)
         if remove_original_audio:
             if used_bgm:
                 bgm_chain = "[1:a]aformat=channel_layouts=stereo,aresample=48000"
@@ -544,10 +547,11 @@ def auto_subtitle_and_bgm(
                 filter_complex_parts.append(bgm_chain)
                 out_audio_label = "[aout]"
             else:
-                out_audio_label = None  # no bgm = silent
+                out_audio_label = None
         else:
             if used_bgm and v_has_audio:
-                voice_chain = "[0:a]aformat=channel_layouts=stereo,aresample=48000,volume=1[voice]"
+                # [SỬA] Tăng âm lượng voice ở đây
+                voice_chain = "[0:a]aformat=channel_layouts=stereo,aresample=48000,volume=1.5[voice]"
                 bgm_chain = "[1:a]aformat=channel_layouts=stereo,aresample=48000"
                 if vid_dur and bgm_is_looped:
                     bgm_chain += f",atrim=0:{vid_dur:.3f},asetpts=N/SR/TB"
@@ -568,88 +572,84 @@ def auto_subtitle_and_bgm(
                 filter_complex_parts.append(bgm_chain)
                 out_audio_label = "[aout]"
             elif not used_bgm and v_has_audio:
-                out_audio_label = "0:a:0"
+                # [SỬA] Tăng âm lượng voice ở đây (khi không có BGM)
+                voice_chain = "[0:a]aformat=channel_layouts=stereo,aresample=48000,volume=1.5[aout]"
+                filter_complex_parts.append(voice_chain)
+                out_audio_label = "[aout]"
             else:
                 out_audio_label = None
 
-        # --- Apply subtitles + finalize output (ĐÃ SỬA) ---
+        # Video filter logic
+        video_filters = []
+        if flip_video:
+            video_filters.append("hflip")
         if burn_in:
-            # Xây dựng chuỗi video filter
-            video_filters = []
-            if flip_video:
-                video_filters.append("hflip")
-            
-            # Thêm phụ đề SAU KHI lật
             video_filters.append(f"subtitles='{safe_quote(ass_path)}'")
-            
-            vf = ",".join(video_filters) # -> "hflip,subtitles=..."
+        
+        video_filter_string = ",".join(video_filters)
+        video_input_label = "0:v:0"
+        video_output_label = "[vout]"
+        
+        if video_filter_string:
+            filter_complex_parts.append(f"[{video_input_label}]{video_filter_string}{video_output_label}")
+        
+        if filter_complex_parts:
+            cmd += ["-filter_complex", ";".join(filter_complex_parts)]
 
-            if filter_complex_parts:
-                cmd += ["-filter_complex", ";".join(filter_complex_parts)]
-                cmd += ["-map", "0:v:0"]
-                if out_audio_label:
-                    cmd += ["-map", out_audio_label]
-                cmd += ["-vf", vf] # Dùng chuỗi filter đã gộp
-            else:
-                cmd += ["-vf", vf, "-map", "0:v:0"] # Dùng chuỗi filter đã gộp
-                if out_audio_label:
-                    cmd += ["-map", out_audio_label]
-
-            cmd += [
-                "-c:v", "libx264",
-                "-preset", preset,
-                "-crf", str(crf),
-                "-c:a", "aac", "-b:a", "192k",
-                "-shortest",
-                output_path
-            ]
+        # --- [C] XÂY DỰNG MAPPING ---
+        # Map video
+        if video_filter_string:
+            cmd += ["-map", video_output_label] # Map video đã lọc
         else:
-            # Logic cho soft subs (ít dùng hơn, nhưng cũng sửa)
-            if not output_path.lower().endswith(".mkv"):
-                output_path = str(Path(output_path).with_suffix(".mkv"))
-            cmd += ["-i", srt_path]
-            srt_index = 2 if used_bgm else 1
+            cmd += ["-map", video_input_label]  # Map video gốc
             
-            video_filters = []
-            if flip_video:
-                video_filters.append("hflip")
+        # Map audio
+        if out_audio_label and out_audio_label != "0:a:0":
+            cmd += ["-map", out_audio_label] 
+        elif out_audio_label == "0:a:0":
+             cmd += ["-map", "0:a:0"] # Trường hợp audio gốc, không filter
+        else:
+            cmd += ["-an"] 
 
-            if filter_complex_parts:
-                cmd += ["-filter_complex", ";".join(filter_complex_parts)]
-            
-            cmd += ["-map", "0:v:0"]
-            if out_audio_label:
-                cmd += ["-map", out_audio_label, "-c:a", "aac", "-b:a", "192k"]
-            else:
-                cmd += ["-an"]
-            
-            if video_filters:
-                 cmd += ["-vf", ",".join(video_filters)]
+        # [SỬA] Map subtitle (nếu là softsub)
+        if not burn_in:
+            srt_index = 2 if used_bgm else 1 # Input 0:video, Input 1:bgm, Input 2:srt HOẶC Input 0:video, Input 1:srt
+            cmd += ["-map", f"{srt_index}:0"]
 
-            cmd += [
-                "-map", f"{srt_index}:0", "-c:s", "srt", 
-                "-c:v", "copy" if not flip_video else "libx264", # Phải encode lại nếu lật
-                "-shortest", output_path
-            ]
+        # --- [D] XÂY DỰNG CODECS VÀ OUTPUT ---
+        if burn_in or flip_video:
+            cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf)]
+        else:
+             if not output_path.lower().endswith(".mkv"):
+                 output_path = str(Path(output_path).with_suffix(".mkv"))
+             cmd += ["-c:v", "copy"]
+
+        if out_audio_label:
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+        
+        # [SỬA] Thêm codec subtitle (nếu là softsub)
+        if not burn_in:
+            cmd += ["-c:s", "srt"]
+            
+        cmd += ["-shortest", output_path]
+        
+        # === KẾT THÚC PHẦN SỬA LỖI ===
 
         run_ffmpeg(cmd)
         
-        # Thêm kiểm tra file an toàn
         if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
              raise RuntimeError("FFmpeg command finished but output file is missing or empty.")
 
+        # --- Upload logic (Giữ nguyên) ---
         if do_upload:
-          try:
-              dropbox_url = upload_to_dropbox(output_path)
-              print(f"Uploaded to Dropbox: {dropbox_url}")
-              # --- APPEND LINK TO GOOGLE SHEET ---
-              append_dropbox_link_to_sheet(sheet_id, dropbox_url)
-          except Exception as e_upload:
-              print(f"LỖI (media.py upload): {e_upload}")
+            try:
+                dropbox_url = upload_to_dropbox(output_path)
+                print(f"Uploaded to Dropbox: {dropbox_url}")
+                append_dropbox_link_to_sheet(sheet_id, dropbox_url)
+            except Exception as e_upload:
+                print(f"LỖI (media.py upload): {e_upload}")
 
-      # Trả về đường dẫn local
         return output_path
-
 # --- Hàm lật video (Giữ nguyên) ---
 
 def flip_video_horizontal(
