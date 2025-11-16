@@ -16,7 +16,16 @@ from app.services.sheets import export_rows, read_sheet_data, update_sheet_cell 
 from gspread_asyncio import AsyncioGspreadClient
 from app.media import remix_video_by_scenes, SceneSegment
 from app.routers.video import SPREADSHEET_ID
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+from app.dependencies import get_sheet_client
 
+# === [MỚI] THÊM BỘ NHỚ ĐỆM CHO STREAMING ===
+# Dùng để lưu trữ các "sự kiện" (events) mà streamer đang chờ
+STREAMING_EVENTS: Dict[str, asyncio.Event] = {}
+# Dùng để lưu trữ "kết quả" (links) mà callback trả về
+STREAMING_RESULTS: Dict[str, Dict] = {}
+# ==========================================
 # 1. Imports
 from fastapi import (
     FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, Depends
@@ -526,3 +535,4 @@ def get_job_status(job_id: str):
         return {"status": "complete", "download_url": public_url}
         
     return status
+

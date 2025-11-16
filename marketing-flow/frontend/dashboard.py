@@ -99,8 +99,12 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
                     st.error(f"Lỗi khi gọi Webhook: {wh_e}")
             # --- KẾT THÚC GỌI WEBHOOK ---
 
+            # --- [SỬA LỖI] PHỤC HỒI LẠI 2 DÒNG NÀY ---
+            # Giờ đây khi đã dùng st.radio, việc tải lại dữ liệu là an toàn
+            # và sẽ không gây reset tab nữa.
             st.toast("Đang tải lại dữ liệu sheet để cập nhật links...")
             refresh_sheet_data("MVP_Content_Plan", "sheet_data")
+            # --- [KẾT THÚC SỬA LỖI] ---
             
         else:
             st.error(f"Lỗi cập nhật Sheet: {res.text}")
@@ -142,7 +146,7 @@ def render_n8n_analysis(analysis_data):
              # Nếu không tìm thấy key hoặc key không phải là string
              st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu phân tích hợp lệ.")
              with st.expander("Xem dữ liệu thô từ n8n (để gỡ lỗi)"):
-                st.json(analysis_data)
+                 st.json(analysis_data)
 
 
 # [THAY THẾ HÀM NÀY TRONG dashboard.py]
@@ -194,18 +198,32 @@ def render_n8n_captions(analysis_data):
                     st.markdown(caption_ig)
 
 
-# --- TẠO 4 TABS (ĐÃ BỎ TAB MVP) ---
-tab_tiktok, tab_subtitle, tab_uploader, tab_dashboard = st.tabs([
+# --- [SỬA LỖI] THAY THẾ st.tabs BẰNG st.radio ĐỂ GIỮ TRẠNG THÁI ---
+tab_options = [
     "1. Phân tích Video Tiktok", 
     "2. Chỉnh sửa Video",
     "3. Đăng tải Đa nền tảng",
-    "4. Báo cáo Hiệu suất" 
-])
+    "4. Báo cáo Hiệu suất"
+]
+
+# Dùng `key="active_tab"` để Streamlit nhớ lựa chọn của người dùng
+active_tab_key = st.radio(
+    "Điều hướng:", 
+    options=tab_options, 
+    horizontal=True, 
+    label_visibility="collapsed",
+    key="active_tab" # Đây là chìa khóa để lưu trạng thái
+)
+# --- KẾT THÚC SỬA LỖI ---
+
 
 # ==========================================================
 # ===== TÍNH NĂNG 1: PHÂN TÍCH TIKTOK  =====
 # ==========================================================
-with tab_tiktok:
+
+# --- [SỬA LỖI] THAY 'with tab_tiktok:' BẰNG 'if active_tab_key == ...' ---
+if active_tab_key == "1. Phân tích Video Tiktok":
+# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
@@ -295,7 +313,10 @@ with tab_tiktok:
 # ==========================================================
 # ===== TÍNH NĂNG 2: CHỈNH SỬA VIDEO  =====
 # ==========================================================
-with tab_subtitle:
+
+# --- [SỬA LỖI] THAY 'with tab_subtitle:' BẰNG 'elif ...' ---
+elif active_tab_key == "2. Chỉnh sửa Video":
+# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
@@ -521,7 +542,10 @@ with tab_subtitle:
 # ==========================================================
 # ===== TÍNH NĂNG 3: ĐĂNG TẢI (TRƯỚC LÀ TAB 4) =====
 # ==========================================================
-with tab_uploader:
+
+# --- [SỬA LỖI] THAY 'with tab_uploader:' BẰNG 'elif ...' ---
+elif active_tab_key == "3. Đăng tải Đa nền tảng":
+# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
@@ -642,7 +666,10 @@ with tab_uploader:
 # ==========================================================
 # ===== TÍNH NĂNG 4: BÁO CÁO (TRƯỚC LÀ TAB 5) =====
 # ==========================================================
-with tab_dashboard:
+
+# --- [SỬA LỖI] THAY 'with tab_dashboard:' BẰNG 'elif ...' ---
+elif active_tab_key == "4. Báo cáo Hiệu suất":
+# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:

@@ -405,7 +405,7 @@ def append_dropbox_link_to_sheet(sheet_id: str, dropbox_link: str, column_name: 
     print(f"✅ Added Dropbox link to sheet at row {next_row}, column '{column_name}'.")
 
 # Hardcode your Dropbox access token
-DROPBOX_ACCESS_TOKEN = "sl.u.AGHJgBIiFfgOPU2IHxVQWkd7uQAAmrnMSGXpZR7xnv9u3VZCpB40mfPNfzmE6phA01VKntdF9k5gDruMFh7uV7JJg0IImZRPlJv-IjpRJiGTv4zeMuwRvT-teXZ8Yo26AsOqgZZlqHn_z7ohMmhNDqZ1tageKgtzyifhPLntS8ocNpLy06hy5bu0IqJcuZ60Gg58i9heIkf_HIUhV1QkZOOmrMOts5a3MzGatbtjBfu246t0Kz3xz-O5Oy6XZ3q_6EbCEUyLJ_9q0OYh-iYZUYWuoVnANs9fK7QNX4HaRKDOEmGixHPi8Dkk7AkIU6THdOEwRvbJppMFue8mWDzze6sEKJdMX_Kw3kqbRHzlbwuL2rVBFgpwiQv-pzNDFnpoQFZx_aX_G7tnuxrlfk1AHUn7O-N4TJaPcYPuXS7TT1kmXWFSUlrX9qVDZTH9z4N-ArlAmHnbPX_38nbd4RDXZ1v349s046jhIdpPsnDDWdcUDKxCC-Dl4Oo3kNBBzLNqdz8f1nKPp8kYSNsFd6Cr2kLGLarBWKtbXdriD1Dis5z8Y5vq_B2MfgmSUjAaqNs3Um4vHYKnEcnM-QRxySQcVQeaiSKbkZXLnlscoVyAmHOPZRt9KMI3G9lDdGWn8ilMnXOH5vPyYM9r89jVeyMVDp9CO24NqnDDKQwzeuCyJxMsYult0dkyLJlsB2BswWuHgF2oThQrEasGW2DvEWG6J0V7QW_5lR-HVjFBxF29ZwL9InxE3zKfPeM8zQWuVH_ummKw9IovWGBM-q1D0sxP8fboUscCn0u7zxj5FcXfMSZOR39huWaVENJfK1E_PB5EFhdjqjD_7EnImu3UMC6Uhq1lzfYhQ-5zyQ0tuMwTwW3rJLjmBVTJrQYPaztJIPRyjaLpLo3BWwK_uocYQ_8f1wsvWjw3esxbL9zr9GRVQTkbJEF6kI8aBPh2e9bUnIQi-cJiRlwjygThPuXqy6osn4RNtix_7tIdeYmnrH160ntsBzVpyyoBeN_NKVgJ7fz6i-qgqsziiYYiIGLTGLp21z0595jHITYIJoqI0MkaiDvwQJsatv0M6nYmO6rZ8fYe3YenhncbebDPjprUc0x3MpXbd9mot2esSHLRelsz8ZmPb10M4Qzx4CdrZAgKPfdEBStV2_oQddxLWGgB46O0mcDMtOxktuPaDk-BEQjmyxcXGxtlqxD4k7u5G-_Vyi3oiaoZccO_sasb-woBJ4YGa2Y2JMQ90uUb999ik6IJgOx8kRHZp2DYh3I_8f4goYa28lBaoK4papdty_cDbRJcCR7xiWSgxjCmthKYimgaOq7YRYPuSsHHILBhHpmUFplmSLMwvX7bsdpP_slYH_FWsnPl6T4zMwJNt4Tf_XVNcw2Wiwzy9QZ3zU_VsKtTSbzH5SMXKSk8NomrE6GuhcV_wf8S"
+DROPBOX_ACCESS_TOKEN = "sl.u.AGHPXF8IPtZyHH282nj3O4n4-P82LKDvDKNSQNuI--bx2xHciXYm4vcXzPH4szfd6NMtg3Ix6UweGrNqHtrIrs3k9Dh3Fln_OhAZ6CAtoUX8jFZX7FbnaHuH-rm3Cct4iEtcjr8gUm4fLMmjY3u4yL71QjTGPQNB0s7fnrWlJWrGYXtVMuShL2PypzCPRrbuo2sBKbdP4CzZbBGp9YK6RTfNQz_9XI3aNQHIQ768yGT41LhTu_-WKh3jOzMr2boeR5Cr_xdGXtmIBDQCIt2SgJ-0fhAg6KKEmT5bJU8f328lgqKFnmSUywFmmXmsBmZ8NUrueKX6k8_jtuX4wMVmBtYVqHVaz66cS3IFyuz-QKiOemWlv66kBN_Usu5L9uePL8yJxfvMirHDku4FBp3MBwgwp4BJmEfMY7KbL8Lu19ULV6hMFWQtopJAdwDYpB8mUKIDSUYA6K5eXen6kFZTLcEFjcosGTwTW5SeCVbBtIbVnJN4Ch4DpFhW8gbrb1XRbi6VHsH74A397tSq5t2gy5JpxLJEB2nGLkWXEffSYHfb5TeGqe5GYHD9_LY0dou5RvPlQs9z7PuQJwa8lm-U-W6Y_214Q5Y3QKtfPavlLVOGR0UWWwFngGY4TqEXy2kgRJjfsQVHCYnunq_VJc3Ukma1TiWQ4Pw7TUdA2rCuZLwYeYt6EjmtQRYnqgmXuwx55uoCtsWL69sJWzFXPWn0EgGz3AmzQk4Zjnw9nKdcJSzmjBhVXwOxYN8yWc-wuJLi2YAjt-9_jDQhZ7EZ87-NfTKkVC3GoPEreI6aK2YqCG2Hf5GmvAj5L82LOGacA28KS94pwFLmoNaWewE02L4G144GGaF_WF7ZhmkWfMRW7BKhAADM47CWPl3IFyHPkUfsmn6WiaNynctN4LtQ6wOSJFo-ZsTgh6G-w4ePvzVFaoi-U2DpXxkzqrBKgPs51jsdZCHcNLlEQunNt_-4d6RFNyGSz9INSyJ5lN8VSooKo6K442TdlR2Rva5UUFC1XBy6FQpCMwdqbXV0jPh9Edf_IciSB6VISGLwbOzX5sg4XTiEicTjgfU77nMbtvCSqveIOiPoHTox2IncV5dcBg8wdMYLjcQSU8cX7E0Ikh9fPzxmpXeHYPPnLfMnPYyxRxVM31Y44gVlYbQT3Lv1CFxmEN8R5S_fJtua3VDIbvhRTpZ8lKUvLl8HIXdycER6v088QIGu05-5vSpw7gFXiDtk5JyYGmq8QHn-RJk0JykK8w0Um0uuRJnVJW-VJgM2LdShh1ncjd4pN7dWno6ZQ-QHMHAZpe2QsFvmJebLcFuIJyNDBYqajFkhsIrDhqqpLBS0a9XZMmgOB4q5qRgSJCNhHyTs8K-iQ9PCNt4A-BGM0zPLcK0F9B5gM2HP6O3xe6ptOzqJpwNT-vQQhVvX-csl2VqY"
 DROPBOX_UPLOAD_PATH = "/Videos"  # Path in your Dropbox where files will be uploaded
 
 dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
@@ -485,20 +485,20 @@ def auto_subtitle_and_bgm(
         cues = transcribe_to_srt(video_path, srt_path, language=language)
 
         # --- Build ASS subtitles (for hardsub) ---
+
+        vw, vh = ffprobe_size(video_path)
+        dyn_font = max(34, min(65, int(round(vh * 0.060))))
+        dyn_margin_v = max(80, int(round(vh * 0.09)))
+        dyn_margin_h = max(40, int(round(vw * 0.05)))
         ass_path = str(Path(tmp) / "subs.ass")
-        if burn_in:
-            vw, vh = ffprobe_size(video_path)
-            dyn_font = max(28, min(48, int(round(vh * 0.040))))
-            dyn_margin_v = max(80, int(round(vh * 0.09)))
-            dyn_margin_h = max(40, int(round(vw * 0.05)))
-            write_ass(
-                cues, ass_path,
-                fontsize=dyn_font, margin_v=dyn_margin_v, margin_h=dyn_margin_h,
-                primary="&H00FFFF00&",
-                outlinecol="&H00000000&",
-                backcol="&H50000000&",
-                outline=3
-            )
+        write_ass(
+            cues, ass_path,
+            fontsize=dyn_font, margin_v=dyn_margin_v, margin_h=dyn_margin_h,
+            primary="&H00FFFFFF&",
+            outlinecol="&H00000000&",
+            backcol="&H50000000&",
+            outline=3
+        )
 
         # === PHẦN SỬA LỖI BẮT ĐẦU TỪ ĐÂY ===
         
