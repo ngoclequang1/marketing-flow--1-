@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import dropbox
 import gspread
+import json
 from pathlib import Path
 from typing import Optional, List, Tuple
 from tqdm import tqdm
@@ -405,9 +406,8 @@ def append_dropbox_link_to_sheet(sheet_id: str, dropbox_link: str, column_name: 
     print(f"✅ Added Dropbox link to sheet at row {next_row}, column '{column_name}'.")
 
 # Hardcode your Dropbox access token
-DROPBOX_ACCESS_TOKEN = "sl.u.AGHPXF8IPtZyHH282nj3O4n4-P82LKDvDKNSQNuI--bx2xHciXYm4vcXzPH4szfd6NMtg3Ix6UweGrNqHtrIrs3k9Dh3Fln_OhAZ6CAtoUX8jFZX7FbnaHuH-rm3Cct4iEtcjr8gUm4fLMmjY3u4yL71QjTGPQNB0s7fnrWlJWrGYXtVMuShL2PypzCPRrbuo2sBKbdP4CzZbBGp9YK6RTfNQz_9XI3aNQHIQ768yGT41LhTu_-WKh3jOzMr2boeR5Cr_xdGXtmIBDQCIt2SgJ-0fhAg6KKEmT5bJU8f328lgqKFnmSUywFmmXmsBmZ8NUrueKX6k8_jtuX4wMVmBtYVqHVaz66cS3IFyuz-QKiOemWlv66kBN_Usu5L9uePL8yJxfvMirHDku4FBp3MBwgwp4BJmEfMY7KbL8Lu19ULV6hMFWQtopJAdwDYpB8mUKIDSUYA6K5eXen6kFZTLcEFjcosGTwTW5SeCVbBtIbVnJN4Ch4DpFhW8gbrb1XRbi6VHsH74A397tSq5t2gy5JpxLJEB2nGLkWXEffSYHfb5TeGqe5GYHD9_LY0dou5RvPlQs9z7PuQJwa8lm-U-W6Y_214Q5Y3QKtfPavlLVOGR0UWWwFngGY4TqEXy2kgRJjfsQVHCYnunq_VJc3Ukma1TiWQ4Pw7TUdA2rCuZLwYeYt6EjmtQRYnqgmXuwx55uoCtsWL69sJWzFXPWn0EgGz3AmzQk4Zjnw9nKdcJSzmjBhVXwOxYN8yWc-wuJLi2YAjt-9_jDQhZ7EZ87-NfTKkVC3GoPEreI6aK2YqCG2Hf5GmvAj5L82LOGacA28KS94pwFLmoNaWewE02L4G144GGaF_WF7ZhmkWfMRW7BKhAADM47CWPl3IFyHPkUfsmn6WiaNynctN4LtQ6wOSJFo-ZsTgh6G-w4ePvzVFaoi-U2DpXxkzqrBKgPs51jsdZCHcNLlEQunNt_-4d6RFNyGSz9INSyJ5lN8VSooKo6K442TdlR2Rva5UUFC1XBy6FQpCMwdqbXV0jPh9Edf_IciSB6VISGLwbOzX5sg4XTiEicTjgfU77nMbtvCSqveIOiPoHTox2IncV5dcBg8wdMYLjcQSU8cX7E0Ikh9fPzxmpXeHYPPnLfMnPYyxRxVM31Y44gVlYbQT3Lv1CFxmEN8R5S_fJtua3VDIbvhRTpZ8lKUvLl8HIXdycER6v088QIGu05-5vSpw7gFXiDtk5JyYGmq8QHn-RJk0JykK8w0Um0uuRJnVJW-VJgM2LdShh1ncjd4pN7dWno6ZQ-QHMHAZpe2QsFvmJebLcFuIJyNDBYqajFkhsIrDhqqpLBS0a9XZMmgOB4q5qRgSJCNhHyTs8K-iQ9PCNt4A-BGM0zPLcK0F9B5gM2HP6O3xe6ptOzqJpwNT-vQQhVvX-csl2VqY"
-DROPBOX_UPLOAD_PATH = "/Videos"  # Path in your Dropbox where files will be uploaded
-
+DROPBOX_ACCESS_TOKEN = "sl.u.AGE7FS3ws9NmnhRUl22o3bEBNnSnAvNwXMU1_lMweanBiD_HTyqD3Hn_j1RzY-_MV6nq_7AFxs6pCG_kRS8DrgWay2mbx5YhNeUc5x3bAc8ZOqZfSqoQYCaNrUga2ib1RSaeBpdMaNrKH4mUY4DykEHIi7XwQY4dz8m8L0E3oimRuDYyLyyao43F57p94iaTkwVYPeEaKp73dBVrpvmxc_0vwNr8xbCYfRh1isY7hKSxuLdPjC0rAQeYBi7wse1-oeV_byOi-uCKoJyEjOVRpWyk0mvlpFKCxRpKg1_0K6FdWVJGK-d9DXLbvdYuDB6RLWcHIHb4iWE1vY5oI1cBWHcb9v0BnRJjnh1iH5rbR29hDnUhDvOjB5B-4R7_e02w8FUJYOEmpG2ZysWUKFcScUWuCe94eN9rFy_25I6-lPCChefrZvSyOw75LehKUGjbOkgDhB62H28vMGBpSZAGoRjEssZvRWKFeb34DbwollAxCROoQz2G7dFWgPO_WKJfmTXiqn5BcCXss2zgHvD31bPoVUk-9Xhd0sXb35GMWWwH0zDFFZ2t7npOktd0yKmSt9EWgPOYz9Vm3gt41yrygeCc6XWeVommvQl97oaFpXmm5v-Odn20xkieZU2ms4MdMIuWemtvzyFcLoiIlNMlgXcTQ9FvRPwNbPd-mkD-dJyjgh8nIMWUSfrFpmCVsRuc0aKfKVJUe7kklQt4J518N6ijuFmHRjZlBBN0p0AEHYAQORjDtTXu95RZRrj90U_2IYyuMZXE9gbylqirkXtwBOI8oEz_pmVxkwqUcy84U3nYZM8sUtb1EZZfGloNj5HDuO8yAaDVW-KVSGm6DCJ0on2MRh7cP6LmXyVWoHP4TnCbT6PGk1S_dKwiN-jdzu1Rgrd6QfbEjWSaH4pEoR0Se-EcBJwnJPpHozqwkHUsXFTf2vMATpXb45uafy-1sfvy_0PxBlo3Kna2oEBT8s-SbFn6QzkAc1gERrMA16KXPY-mxlIXKXsGMOTRcpMj8wQizUEZKH4LcpxSGbjidoWk-Yki3m0_Esv46SzcRGZ9AxhNt2r5zrObeWS80Q9ezfJPeheco4f1PvsXOgquf9Fl-W_Y07JU5x_Uoj-jeiDX4cVNW_8DtCg_ymg7OgoaNvKdi1IW9w8lcBY2oY0ycid9JwrEOnbuL6ci-Tdx-ldVF4Dz9mHQy7eyESu6sKFn6z4i6NjBoImpq4gxQVUEOQilQLgqfCOoqamp_8U3wqXgUKRnhWwHGf3_w4ML7U0tTO7BlhMM_3gKYg533jd97wWupdUc9hBwuWF3lkyczzk7_yfmhVYpeWtYOA40Awmqvu9pQvmYAhCzDjoRSGfoExfPHgls69kH2svDu0OxVol5XDwYsolrcOUihp8tzXJ7mi4XtDs64vneBne-vDesJfpgcQLY"
+DROPBOX_UPLOAD_PATH = "/Videos"
 dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
 
 def upload_to_dropbox(local_file_path: str, dropbox_path: str = DROPBOX_UPLOAD_PATH) -> str:
@@ -432,10 +432,11 @@ def auto_subtitle_and_bgm(
     output_path: str,
     bgm_path: Optional[str] = None,
     language: Optional[str] = None,
+    segments_json: Optional[str] = None,
     burn_in: bool = True,
     crf: int = 18,
     preset: str = "medium",
-    initial_bgm_gain: float = 0.20, # <-- Giữ nguyên 0.20 (hoặc 0.35 tùy bạn)
+    initial_bgm_gain: float = 0.35, # <-- Giữ nguyên 0.20 (hoặc 0.35 tùy bạn)
     duck_threshold: float = 0.05,
     duck_ratio: float = 12.0,
     duck_attack_ms: int = 5,
@@ -480,12 +481,42 @@ def auto_subtitle_and_bgm(
             video_path = synth_path
             v_has_video = v_has_audio = True
 
-        # --- Transcribe to generate subtitles ---
+        # --- [SỬA ĐỔI] Transcribe HOẶC Dùng segments_json ---
         srt_path = str(Path(tmp) / "subs.srt")
-        cues = transcribe_to_srt(video_path, srt_path, language=language)
+        cues = [] # Khởi tạo list
+        
+        if segments_json and segments_json != "[]":
+            print("[auto_subtitle] Đã nhận segments_json, bỏ qua transcription.")
+            try:
+                # segments_json là một chuỗi JSON của list[dict]
+                segments_data = json.loads(segments_json)
+                
+                # Chuyển đổi nó sang định dạng 'cues' (List[Tuple[int, float, float, str]])
+                for i, seg in enumerate(segments_data):
+                    start = seg.get("start_sec")
+                    end = seg.get("end_sec")
+                    text = seg.get("text")
+                    if start is not None and end is not None and text is not None:
+                        cues.append((i + 1, float(start), float(end), str(text)))
+                
+                if not cues:
+                     raise ValueError("segments_json hợp lệ nhưng không parse được cues.")
+                     
+                # Vẫn tạo file SRT (để dùng cho softsub nếu 'burn_in' là False)
+                write_srt(cues, srt_path)
+
+            except Exception as e_parse:
+                print(f"LỖI parse segments_json: {e_parse}. Sẽ chạy transcription lại (Fallback).")
+                cues = transcribe_to_srt(video_path, srt_path, language=language)
+        
+        else:
+            # Logic cũ: Chạy transcription nếu không có segments_json
+            print("[auto_subtitle] Không có segments_json, chạy transcription mới...")
+            cues = transcribe_to_srt(video_path, srt_path, language=language)
+        # --- KẾT THÚC SỬA ĐỔI ---
 
         # --- Build ASS subtitles (for hardsub) ---
-
+        # (Khối này giữ nguyên, nó sẽ dùng 'cues' (đã sửa hoặc thô) từ bước trên)
         vw, vh = ffprobe_size(video_path)
         dyn_font = max(34, min(65, int(round(vh * 0.060))))
         dyn_margin_v = max(80, int(round(vh * 0.09)))
@@ -494,7 +525,7 @@ def auto_subtitle_and_bgm(
         write_ass(
             cues, ass_path,
             fontsize=dyn_font, margin_v=dyn_margin_v, margin_h=dyn_margin_h,
-            primary="&H00FFFFFF&",
+            primary="&H00FFFFFF&", # Màu trắng (như bạn đã sửa)
             outlinecol="&H00000000&",
             backcol="&H50000000&",
             outline=3
@@ -507,6 +538,7 @@ def auto_subtitle_and_bgm(
 
         used_bgm = False
         vid_dur = ffprobe_duration(video_path)
+        bgm_is_looped = False # Khởi tạo biến
 
         if bgm_path:
             bgm_path = str(Path(bgm_path).resolve())
@@ -752,7 +784,6 @@ def remix_video_by_scenes(
     run_ffmpeg(cmd)
     
     if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
-         raise RuntimeError("FFmpeg remix command finished but output file is missing or empty.")
+       raise RuntimeError("FFmpeg remix command finished but output file is missing or empty.")
 
     return str(output_path)
-    

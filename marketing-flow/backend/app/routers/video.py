@@ -614,26 +614,56 @@ async def viral_analyze(
         if not raw_segments_tuples:
             raise Exception("Không thể tạo phụ đề (transcription). Video có thể không có lời thoại.")
 
-        # 4) Xử lý 'all_segments'
-        for _, start, end, text in raw_segments_tuples:
-            duration = round(end - start, 3)
-            if duration < 0.1: continue
-            final_all_segments.append(SceneSegment(
-                start_sec=start, end_sec=end, duration_sec=duration, text=text.strip(), reason=""
-            ))
-        stats_all = _scene_stats(final_all_segments)
-
-        # 5) Format transcript cho AI
+        # 4) Format transcript cho AI (Đưa bước 5 lên trước)
         raw_transcript_string = "\n".join(
             f"[{s:.3f} --> {e:.3f}] {t.strip()}" for _, s, e, t in raw_segments_tuples
         )
         print(f"[viral_analyze] Đã transcribe. Bắt đầu sửa lỗi AI...")
 
-        # 6) Sửa lỗi chính tả (Proofreading)
+        # 5) Sửa lỗi chính tả (Proofreading) (Đưa bước 6 lên trước)
         corrected_transcript_string = await run_in_threadpool(
             nlp.correct_subtitles, raw_transcript_string
         )
-        print(f"[viral_analyze] Đã sửa lỗi. Bắt đầu tìm đoạn hay (highlights)...")
+        print(f"[viral_analyze] Đã sửa lỗi. Bắt đầu tái tạo segments...")
+
+        # 6) [SỬA ĐỔI] Tái tạo 'all_segments' TỪ BẢN ĐÃ SỬA LỖI
+        final_all_segments = [] # Khởi tạo list rỗng
+        
+        # Regex để parse: [0.123 --> 1.456] Text
+        pattern = re.compile(r"\[(\d+\.\d+) --> (\d+\.\d+)\]\s*(.*)", re.DOTALL)
+        
+        for line in corrected_transcript_string.strip().split('\n'):
+            match = pattern.match(line.strip())
+            if match:
+                try:
+                    start_sec = float(match.group(1))
+                    end_sec = float(match.group(2))
+                    text = match.group(3).strip()
+                    duration = round(end_sec - start_sec, 3)
+                    
+                    if duration > 0.1:
+                        final_all_segments.append(SceneSegment(
+                            start_sec=start_sec,
+                            end_sec=end_sec,
+                            duration_sec=duration,
+                            text=text,
+                            
+                        ))
+                except Exception as e_parse:
+                    print(f"Lỗi parse dòng transcript đã sửa: {e_parse} - Dòng: {line}")
+        
+        # Cơ chế Fallback: Nếu AI làm hỏng định dạng và không parse được gì
+        if not final_all_segments:
+             print("[viral_analyze] CẢNH BÁO: Không thể parse transcript đã sửa. Sẽ dùng bản thô.")
+             for _, start, end, text in raw_segments_tuples:
+                duration = round(end - start, 3)
+                if duration < 0.1: continue
+                final_all_segments.append(SceneSegment(
+                    start_sec=start, end_sec=end, duration_sec=duration, text=text.strip(), reason=""
+                ))
+
+        stats_all = _scene_stats(final_all_segments) # Tính toán lại stats
+        print(f"[viral_analyze] Đã tái tạo {len(final_all_segments)} segments. Bắt đầu tìm highlights...")
 
         # 7) Phân tích của AI (AI Analysis) - để lấy highlights
         ai_segments_list = await run_in_threadpool(

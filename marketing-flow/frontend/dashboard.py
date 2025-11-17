@@ -4,6 +4,7 @@ import time
 import os
 import json
 import pandas as pd
+import re # Thêm re để xử lý text
 
 # URL backend FastAPI của bạn
 API_URL = "http://localhost:8080"
@@ -15,8 +16,7 @@ st.set_page_config(
     page_icon="🎬"
 )
 
-# === SỬA LỖI: ĐỊNH NGHĨA CSS TỶ LỆ 16:9 (DÙNG CHUNG) ===
-# Định nghĩa style 1 lần ở đây để cả Tab 2 và Tab 3 đều dùng được
+# === ĐỊNH NGHĨA CSS TỶ LỆ 16:9 (DÙNG CHUNG) ===
 video_style_16_9 = """
 <style>
 /* Định nghĩa khung bọc 16:9 cho video ngang */
@@ -40,7 +40,7 @@ video_style_16_9 = """
 </style>
 """
 st.markdown(video_style_16_9, unsafe_allow_html=True)
-# === KẾT THÚC SỬA LỖI ===
+# === KẾT THÚC CSS ===
 
 
 # --- HÀM TẢI LẠI DỮ LIỆU SHEET (DÙNG CHUNG) ---
@@ -60,11 +60,12 @@ def refresh_sheet_data(sheet_name, state_key):
         st.error(f"Lỗi kết nối API: {e}")
 
 # --- TÍNH NĂNG (TICK GOOGLE SHEET) ---
+# (Phiên bản đơn giản, không polling, đã sửa lỗi `rerun`)
 def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
     """
     Gửi yêu cầu cập nhật đến API /export/sheet/update-cell
-    VÀ TỰ ĐỘNG TẢI LẠI DỮ LIỆU SAU KHI THÀNH CÔNG
     VÀ GỌI WEBHOOK NẾU LÀ NÚT 'READY'
+    VÀ TẢI LẠI DỮ LIỆU 1 LẦN
     """
     new_value = st.session_state[key]
     
@@ -91,7 +92,7 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
                     wh_res = requests.post(WEBHOOK_URL, json=webhook_payload, timeout=5)
                     
                     if wh_res.status_code == 200:
-                        st.toast("🚀 Webhook đã kích hoạt thành công!", icon="🎉")
+                        st.toast("🚀 Webhook đã kích hoạt! n8n đang xử lý...", icon="🎉")
                     else:
                         st.warning(f"Webhook response: {wh_res.status_code} - {wh_res.text}")
                 
@@ -99,12 +100,9 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
                     st.error(f"Lỗi khi gọi Webhook: {wh_e}")
             # --- KẾT THÚC GỌI WEBHOOK ---
 
-            # --- [SỬA LỖI] PHỤC HỒI LẠI 2 DÒNG NÀY ---
-            # Giờ đây khi đã dùng st.radio, việc tải lại dữ liệu là an toàn
-            # và sẽ không gây reset tab nữa.
-            st.toast("Đang tải lại dữ liệu sheet để cập nhật links...")
+            # Tải lại sheet NGAY LẬP TỨC để lưu checkbox
+            # (Người dùng sẽ phải bấm "Làm mới" sau để lấy link)
             refresh_sheet_data("MVP_Content_Plan", "sheet_data")
-            # --- [KẾT THÚC SỬA LỖI] ---
             
         else:
             st.error(f"Lỗi cập nhật Sheet: {res.text}")
@@ -114,87 +112,148 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
         st.error(f"Lỗi kết nối API: {e}")
         st.session_state[key] = not new_value
 
+# --- [CẢI TIẾN] CÁC HÀM HELPER ĐỂ HIỂN THỊ N8N ---
+def _find_key_in_dict(data_dict, potential_keys):
+    """
+    Hàm helper tìm key trong dict, không phân biệt chữ hoa/thường/dấu cách/gạch dưới.
+    """
+    if not isinstance(data_dict, dict):
+        return None
+        
+    for key in data_dict:
+        normalized_key = str(key).lower().replace(" ", "").replace("_", "")
+        if normalized_key in potential_keys:
+            return data_dict[key]
+    return None
 
-# --- [MỚI] HÀM HIỂN THỊ PHÂN TÍCH TỪ N8N ---
+def _format_text_as_markdown_list(text_content):
+    """
+    Hàm helper để chuyển một chuỗi văn bản (string)
+    có chứa dấu '•' thành một danh sách Markdown (list)
+    được định dạng đẹp.
+    """
+    if not text_content:
+        return ""
+    
+    # Tách chuỗi dựa trên ký tự bullet '•'
+    parts = re.split(r'•', text_content)
+    
+    markdown_list = []
+    for part in parts:
+        part_trimmed = part.strip()
+        if part_trimmed: # Bỏ qua các chuỗi rỗng
+            # Thêm dấu * và một dấu cách
+            markdown_list.append(f"* {part_trimmed}")
+            
+    return "\n".join(markdown_list)
+
+# --- [CẢI TIẾN] HÀM HIỂN THỊ N8N (TAB 1) ---
 def render_n8n_analysis(analysis_data):
     """
     Hiển thị kết quả phân tích AI (dưới dạng một chuỗi lớn) từ n8n.
+    [CẢI TIẾN 3.0] Tự động format '•' thành Markdown list.
     """
     if not isinstance(analysis_data, dict):
         st.caption("Không có dữ liệu phân tích AI (n8n).")
         return
-    
-    # [SỬA] Tìm key chứa chuỗi phân tích.
-    # Thử tìm "Phân tích video" (tiếng Việt) hoặc "analysis" (tiếng Anh)
-    analysis_key = None
-    if "Phân tích video" in analysis_data:
-        analysis_key = "Phân tích video"
-    elif "analysis" in analysis_data:
-        analysis_key = "analysis"
-        
-    # Lấy nội dung
-    analysis_content = analysis_data.get(analysis_key) if analysis_key else None
+
+    analysis_content = _find_key_in_dict(
+        analysis_data, 
+        ["phântíchvideo", "analysis"]
+    )
 
     with st.container(border=True):
-        st.subheader("🤖 Phân tích AI (từ n8n)")
+        st.subheader("🤖 Phân tích AI")
         
         if analysis_content and isinstance(analysis_content, str):
-            # [SỬA] Hiển thị trực tiếp chuỗi (string) vì nó đã được định dạng sẵn
-            st.markdown(analysis_content)
-        
+            
+            # [CẢI TIẾN UI/UX]
+            parts = re.split(
+                r'((?:❌|X)\s*ĐIỂM YẾU:|(?:💡)\s*GỢI Ý CẢI THIỆN:)', 
+                analysis_content, 
+                flags=re.IGNORECASE
+            )
+            
+            # --- Xử lý ĐIỂM MẠNH (Luôn là phần tử đầu tiên) ---
+            part_strong = re.sub(
+                r'^(?:✅|✔️)\s*ĐIỂM MẠNH:', '', 
+                parts[0], flags=re.IGNORECASE
+            ).strip()
+            
+            if part_strong:
+                with st.container(border=True):
+                    st.success("✅ ĐIỂM MẠNH")
+                    formatted_strong = _format_text_as_markdown_list(part_strong)
+                    st.markdown(formatted_strong)
+
+            # --- Xử lý ĐIỂM YẾU VÀ GỢI Ý (Nếu có) ---
+            if len(parts) > 1:
+                content_map = {}
+                current_key = None
+
+                for part in parts[1:]:
+                    if re.match(r'(?:❌|X|💡)', part.strip()):
+                        if "ĐIỂM YẾU" in part.upper():
+                            current_key = "WEAK"
+                        elif "GỢI Ý" in part.upper():
+                            current_key = "SUGGEST"
+                    
+                    elif current_key and part.strip():
+                        content_map[current_key] = part.strip()
+                        current_key = None
+
+                # Hiển thị
+                if "WEAK" in content_map:
+                    with st.container(border=True):
+                        st.error("❌ ĐIỂM YẾU")
+                        formatted_weak = _format_text_as_markdown_list(content_map["WEAK"])
+                        st.markdown(formatted_weak)
+                
+                if "SUGGEST" in content_map:
+                    with st.container(border=True):
+                        st.info("💡 GỢI Ý CẢI THIỆN")
+                        formatted_suggest = _format_text_as_markdown_list(content_map["SUGGEST"])
+                        st.markdown(formatted_suggest)
+
         else:
-             # Nếu không tìm thấy key hoặc key không phải là string
-             st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu phân tích hợp lệ.")
-             with st.expander("Xem dữ liệu thô từ n8n (để gỡ lỗi)"):
-                 st.json(analysis_data)
+            st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu phân tích hợp lệ.")
+            with st.expander("Xem dữ liệu thô từ n8n (để gỡ lỗi)"):
+                st.json(analysis_data)
 
 
-# [THAY THẾ HÀM NÀY TRONG dashboard.py]
-
+# --- [CẢI TIẾN] HÀM HIỂN THỊ N8N (TAB 2) ---
 def render_n8n_captions(analysis_data):
     """Hiển thị Title và Captions (Tool 2) từ n8n."""
     if not isinstance(analysis_data, dict):
-        st.caption("Không có dữ liệu phân tích AI (n8n).")
+        st.caption("Không có dữ liệu phân tích AI.")
         return
 
-    # Hàm helper tìm key không phân biệt chữ hoa/thường/dấu cách/gạch dưới
-    def find_key(data_dict, potential_keys):
-        for key in data_dict:
-            normalized_key = str(key).lower().replace(" ", "").replace("_", "")
-            if normalized_key in potential_keys:
-                return data_dict[key]
-        return None
-
-    # Tìm các giá trị
-    title = find_key(analysis_data, ["title", "tiêuđề"])
-    caption_fb = find_key(analysis_data, ["captionfacebook", "caption_facebook", "captionfb"])
-    caption_ig = find_key(analysis_data, ["captioninstagram", "caption_instagram", "captionig"])
+    title = _find_key_in_dict(analysis_data, ["title", "tiêuđề"])
+    caption_fb = _find_key_in_dict(analysis_data, ["captionfacebook", "caption_facebook", "captionfb"])
+    caption_ig = _find_key_in_dict(analysis_data, ["captioninstagram", "caption_instagram", "captionig"])
     
     has_valid_data = (title or caption_fb or caption_ig)
 
     with st.container(border=True):
-        st.subheader("🤖 Phân tích AI (từ n8n)")
+        st.subheader("Gợi ý Nội dung")
         
         if not has_valid_data:
-             st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu Title/Caption.")
+            st.caption("Webhook n8n đã chạy nhưng không trả về dữ liệu Title/Caption.")
         else:
-            
-            # --- [SỬA ĐỔI] Dùng st.container + st.caption + st.markdown ---
-            # --- thay vì st.text_input(disabled=True) ---
             
             if title:
                 with st.container(border=True):
-                    st.caption("Tiêu đề (Title)")
+                    st.markdown("##### Tiêu đề (Title)")
                     st.markdown(title)
             
             if caption_fb:
                 with st.container(border=True):
-                    st.caption("Caption Facebook")
+                    st.markdown("##### Caption Facebook")
                     st.markdown(caption_fb)
             
             if caption_ig:
                 with st.container(border=True):
-                    st.caption("Caption Instagram")
+                    st.markdown("##### Caption Instagram")
                     st.markdown(caption_ig)
 
 
@@ -206,30 +265,29 @@ tab_options = [
     "4. Báo cáo Hiệu suất"
 ]
 
-# Dùng `key="active_tab"` để Streamlit nhớ lựa chọn của người dùng
-active_tab_key = st.radio(
-    "Điều hướng:", 
-    options=tab_options, 
-    horizontal=True, 
-    label_visibility="collapsed",
-    key="active_tab" # Đây là chìa khóa để lưu trạng thái
-)
-# --- KẾT THÚC SỬA LỖI ---
+# === [CẢI TIẾN] CĂN GIỮA NAVBAR ===
+_, nav_col, _ = st.columns([0.5, 3, 0.5])
+
+with nav_col:
+    active_tab_key = st.radio(
+        "Điều hướng:", 
+        options=tab_options, 
+        horizontal=True, 
+        label_visibility="collapsed",
+        key="active_tab" # Đây là chìa khóa để lưu trạng thái
+    )
+# === KẾT THÚC SỬA LỖI ===
 
 
 # ==========================================================
 # ===== TÍNH NĂNG 1: PHÂN TÍCH TIKTOK  =====
 # ==========================================================
-
-# --- [SỬA LỖI] THAY 'with tab_tiktok:' BẰNG 'if active_tab_key == ...' ---
 if active_tab_key == "1. Phân tích Video Tiktok":
-# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("Phân tích Video TikTok")
         
-        # [SỬA] Thêm ô nhập Keyword
         tt_url = st.text_input("Dán URL video TikTok", key="tt_url")
         tt_keyword = st.text_input("Nhập Keyword", key="tt_keyword")
         
@@ -243,13 +301,11 @@ if active_tab_key == "1. Phân tích Video Tiktok":
         
         if st.button("Phân tích Video"):
             
-            # [SỬA] Thêm kiểm tra validation
             if not tt_url or not tt_keyword:
                 st.warning("Vui lòng nhập cả URL TikTok và Keyword.")
             else:
                 with st.spinner("Đang tải..."):
                     try:
-                        # [SỬA]
                         params = {
                             "url": tt_url, 
                             "language": language,
@@ -287,7 +343,6 @@ if active_tab_key == "1. Phân tích Video Tiktok":
             video_url = data.get('video_url')
             
             if video_url:
-                # --- [SỬA LỖI] Khôi phục code định nghĩa video_html ---
                 video_url_full = f"{API_URL}{video_url}"
                 video_html = f"""
                 <div class="video-wrapper-16_9">
@@ -298,13 +353,10 @@ if active_tab_key == "1. Phân tích Video Tiktok":
                 </div>
                 """
                 st.markdown(video_html, unsafe_allow_html=True)
-                # --- HẾT SỬA LỖI ---
             
-            # === [MỚI] HIỂN THỊ PHÂN TÍCH N8N ===
             ai_analysis = data.get('ai_analysis')
             if ai_analysis:
-                render_n8n_analysis(ai_analysis)
-            # =======================================
+                render_n8n_analysis(ai_analysis) # Gọi hàm render mới
 
             st.divider()
             
@@ -313,19 +365,15 @@ if active_tab_key == "1. Phân tích Video Tiktok":
 # ==========================================================
 # ===== TÍNH NĂNG 2: CHỈNH SỬA VIDEO  =====
 # ==========================================================
-
-# --- [SỬA LỖI] THAY 'with tab_subtitle:' BẰNG 'elif ...' ---
 elif active_tab_key == "2. Chỉnh sửa Video":
-# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
         st.header("Công cụ chỉnh sửa Video")
 
         # --- BƯỚC 1: PHÂN TÍCH (Giống Tool 2) ---
-        st.subheader("Bước 1: Phân tích Video")
+        st.subheader("Bước 1: Tải Video")
         
-        # Khởi tạo state
         if 'tt_analysis_done' not in st.session_state:
             st.session_state.tt_analysis_done = False
         if 'tt_analysis_results' not in st.session_state:
@@ -350,7 +398,6 @@ elif active_tab_key == "2. Chỉnh sửa Video":
             else:
                 with st.spinner("Đang tải..."):
                     try:
-                        # [SỬA]
                         params = {
                             "url": tt_url, 
                             "language": language,
@@ -377,7 +424,6 @@ elif active_tab_key == "2. Chỉnh sửa Video":
         if st.session_state.tt_analysis_done:
             data = st.session_state.tt_analysis_results
             
-            # (Sao chép y hệt code hiển thị của Tool 2)
             source_url = data.get('source_url')
             if source_url:
                 st.caption(f"Nguồn: {source_url}")
@@ -396,17 +442,25 @@ elif active_tab_key == "2. Chỉnh sửa Video":
 
             ai_analysis = data.get('ai_analysis')
             if ai_analysis:
-                render_n8n_captions(ai_analysis) # <-- Gọi hàm mới
-            # [KẾT THÚC THÊM]
+                render_n8n_captions(ai_analysis) # Gọi hàm render mới
             
             st.divider()
 
-            st.subheader("🎬 Toàn bộ Phụ đề của Video")
+            # [SỬA UI/UX] Đổi tiêu đề và bỏ cột 'reason'
+            st.subheader("🎬 Phụ đề của Video (Đã sửa lỗi)") 
             all_segments_data = data.get('all_segments', [])
+            
             if not all_segments_data:
                 st.info("Không có dữ liệu phụ đề.")
             else:
-                st.dataframe(all_segments_data, height=200, use_container_width=True)
+                # Chuyển sang DataFrame để dễ dàng bỏ cột 'reason'
+                df_segments = pd.DataFrame(all_segments_data)
+                
+                # Kiểm tra xem cột 'reason' có tồn tại không trước khi xóa
+                if 'reason' in df_segments.columns:
+                    df_segments = df_segments.drop(columns=['reason'])
+                
+                st.dataframe(df_segments, height=200, use_container_width=True)
 
             st.subheader("🤖 Highlights do AI chọn")
             ai_highlights_data = data.get('ai_highlights', [])
@@ -423,7 +477,7 @@ elif active_tab_key == "2. Chỉnh sửa Video":
                     end_m, end_s = divmod(end_time, 60)
                     timestamp = f"[{int(start_m):02d}:{start_s:04.1f} -> {int(end_m):02d}:{end_s:04.1f}]"
                     with st.expander(f"**{i+1}. {reason}** ({timestamp})"):
-                        st.write(text)
+                        st.markdown(f"> {text}") # Thêm blockquote
             
             # --- BƯỚC 3: TÙY CHỌN CHỈNH SỬA & TẠO VIDEO ---
             st.divider()
@@ -432,18 +486,20 @@ elif active_tab_key == "2. Chỉnh sửa Video":
             # Lấy thông tin cần thiết từ kết quả phân tích
             source_video_path = data.get('video_path')
             highlights_json_string = json.dumps(data.get('ai_highlights', []))
+            
+            # [SỬA LỖI] Lấy phụ đề đã sửa (cho Bước 3)
+            corrected_segments_data = data.get('all_segments', [])
+            segments_json_string = json.dumps(corrected_segments_data, ensure_ascii=False)
 
-            # Input mới
             do_remix = st.checkbox("Remix video (chỉ giữ lại các highlights do AI chọn)", value=False, key="remix_do_remix")
             
             if do_remix and not ai_highlights_data:
                 st.warning("AI không tìm thấy highlights nào. Tính năng Remix sẽ bị bỏ qua và video gốc sẽ được sử dụng.")
                 do_remix = False # Tự động tắt nếu không có highlight
 
-            # Input cũ (giữ nguyên)
             remix_bgm_file = st.file_uploader("2. (Tùy chọn) Tải lên nhạc nền (BGM)", type=["mp3", "wav", "m4a"], key="remix_bgm")
             
-            remix_bgm_mode = "mix"
+            # [SỬA LỖI] Khởi tạo biến Ở ĐÂY (bên ngoài if)
             remix_remove_original_audio = False
             
             if remix_bgm_file:
@@ -476,7 +532,10 @@ elif active_tab_key == "2. Chỉnh sửa Video":
                             'keyword': tt_keyword, # Lấy từ input Bước 1
                             'do_remix': str(do_remix),
                             'highlights_json': highlights_json_string,
-                            'remove_original_audio': str(remix_remove_original_audio),
+                            
+                            'segments_json': segments_json_string, # Dùng phụ đề đã sửa
+                            
+                            'remove_original_audio': str(remix_remove_original_audio), 
                             'burn_in': str(remix_burn_in),
                             'flip_video': str(remix_flip_video)
                         }
@@ -540,12 +599,9 @@ elif active_tab_key == "2. Chỉnh sửa Video":
                         st.error(f"Lỗi nghiêm trọng: {e}")
                         
 # ==========================================================
-# ===== TÍNH NĂNG 3: ĐĂNG TẢI (TRƯỚC LÀ TAB 4) =====
+# ===== TÍNH NĂNG 3: ĐĂNG TẢI =====
 # ==========================================================
-
-# --- [SỬA LỖI] THAY 'with tab_uploader:' BẰNG 'elif ...' ---
 elif active_tab_key == "3. Đăng tải Đa nền tảng":
-# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
@@ -564,126 +620,258 @@ elif active_tab_key == "3. Đăng tải Đa nền tảng":
             
             if not all_data or len(all_data) < 2:
                 st.warning(f"Không tìm thấy dữ liệu trong sheet hoặc sheet trống.")
-            else:
-                header_row_index = -1
-                headers = []
-                
-                LOOKUP_COL_1 = "keyword"
-                LOOKUP_COL_2 = "link video gốc" 
+                st.stop()
 
-                for i, row in enumerate(all_data):
-                    if not row: continue
-                    cleaned_row = [str(cell).strip().lower() for cell in row]
-                    
-                    if LOOKUP_COL_1 in cleaned_row and LOOKUP_COL_2 in cleaned_row:
-                        header_row_index = i
-                        headers = all_data[header_row_index] 
-                        break 
-                
-                if header_row_index == -1:
-                    st.error(f"Không tìm thấy hàng tiêu đề. Cần tìm thấy CỘT '{LOOKUP_COL_1}' VÀ '{LOOKUP_COL_2}'.")
-                    st.stop()
+            # --- 1. Xử lý Header (Giữ nguyên) ---
+            header_row_index = -1
+            headers = []
+            
+            LOOKUP_COL_1 = "keyword"
+            LOOKUP_COL_2 = "link video gốc" 
 
-                # --- Tạo map ánh xạ ---
-                cleaned_header_map = {str(h).strip().lower(): idx for idx, h in enumerate(headers)}
+            for i, row in enumerate(all_data):
+                if not row: continue
+                cleaned_row = [str(cell).strip().lower() for cell in row]
+                
+                if LOOKUP_COL_1 in cleaned_row and LOOKUP_COL_2 in cleaned_row:
+                    header_row_index = i
+                    headers = all_data[header_row_index] 
+                    break 
+            
+            if header_row_index == -1:
+                st.error(f"Không tìm thấy hàng tiêu đề. Cần tìm thấy CỘT '{LOOKUP_COL_1}' VÀ '{LOOKUP_COL_2}'.")
+                st.stop()
+
+            cleaned_header_map = {str(h).strip().lower(): idx for idx, h in enumerate(headers)}
+
+            try:
+                IDX_TITLE = cleaned_header_map[LOOKUP_COL_1]
+                IDX_FB_CHECK = cleaned_header_map["facebook"]
+                IDX_IG_CHECK = cleaned_header_map["ig"]
+                IDX_READY_CHECK = cleaned_header_map["ready"]
+                IDX_ERROR_CHECK = cleaned_header_map["error"]
+                IDX_FB_LINK = cleaned_header_map.get("link facebook", -1)
+                IDX_IG_LINK = cleaned_header_map.get("link instagram", -1)
+            except KeyError as e:
+                st.error(f"Lỗi cấu trúc Sheet. Không tìm thấy cột cần thiết: {e}.")
+                st.stop()
+            
+            # --- 2. Phân loại dữ liệu (Giữ nguyên) ---
+            pending_rows = []
+            published_rows = []
+            error_rows = []
+
+            for i, row_data in enumerate(all_data):
+                if i <= header_row_index:
+                    continue 
 
                 try:
-                    IDX_TITLE = cleaned_header_map[LOOKUP_COL_1]
-                    IDX_FB_CHECK = cleaned_header_map["facebook"]
-                    IDX_IG_CHECK = cleaned_header_map["ig"]
-                    IDX_READY_CHECK = cleaned_header_map["ready"]
-                    IDX_ERROR_CHECK = cleaned_header_map["error"]
-                    IDX_FB_LINK = cleaned_header_map.get("link facebook", -1) # Dùng .get() để tránh lỗi
-                    IDX_IG_LINK = cleaned_header_map.get("link instagram", -1) # Dùng .get() để tránh lỗi
-                except KeyError as e:
-                    st.error(f"Lỗi cấu trúc Sheet. Không tìm thấy cột cần thiết: {e}.")
-                    st.stop()
+                    video_title = str(row_data[IDX_TITLE]).strip()
+                    if not video_title:
+                        continue 
+
+                    val_error = str(row_data[IDX_ERROR_CHECK]).upper() == 'TRUE'
+                    link_fb = row_data[IDX_FB_LINK] if IDX_FB_LINK != -1 else ""
+                    link_ig = row_data[IDX_IG_LINK] if IDX_IG_LINK != -1 else ""
+                    
+                    has_link = (link_fb and "http" in str(link_fb)) or \
+                               (link_ig and "http" in str(link_ig))
+                    
+                    row_info = {
+                        "row_data": row_data,
+                        "gspread_index": i + 1, 
+                        "title": video_title,
+                        "link_fb": link_fb,
+                        "link_ig": link_ig
+                    }
+
+                    if val_error:
+                        error_rows.append(row_info)
+                    elif has_link:
+                        published_rows.append(row_info)
+                    else:
+                        pending_rows.append(row_info)
+
+                except IndexError:
+                    continue 
+
+            # --- 3. Hiển thị bằng st.tabs (Giữ nguyên) ---
+            
+            tab_pending, tab_published, tab_error = st.tabs(
+                [
+                    f"⌛ Chờ xử lý ({len(pending_rows)})",
+                    f"✅ Đã đăng ({len(published_rows)})",
+                    f"❌ Bị lỗi ({len(error_rows)})"
+                ]
+            )
+
+            # === TAB 1: CHỜ XỬ LÝ ===
+            with tab_pending:
+                st.subheader("Danh sách video chờ đăng")
                 
-                # --- Hiển thị Header ---
-                header_cols = st.columns([4, 0.7, 0.7, 0.7, 0.7, 2])
+                # --- [SỬA LỖI CĂN LỀ] ---
+                # Bỏ HTML và dùng st.markdown đơn giản.
+                # Nó sẽ tự động căn lề trái, khớp với checkbox bên dưới.
+                header_cols = st.columns([4, 1, 1, 1])
                 header_cols[0].markdown(f"**{headers[IDX_TITLE]}**")
                 header_cols[1].markdown(f"**{headers[IDX_FB_CHECK]}**")
                 header_cols[2].markdown(f"**{headers[IDX_IG_CHECK]}**")
                 header_cols[3].markdown(f"**{headers[IDX_READY_CHECK]}**")
-                header_cols[4].markdown(f"**{headers[IDX_ERROR_CHECK]}**")
-                header_cols[5].markdown(f"**Links**")
-                st.divider()
-                
-                # --- Vòng lặp data ---
-                for i, row_data in enumerate(all_data):
-                    if i <= header_row_index:
-                        continue 
-                    
-                    row_index_gspread = i + 1 
-                    
-                    try:
-                        video_title = row_data[IDX_TITLE]
-                        if not video_title:
-                            continue 
-                        
+                # --- KẾT THÚC SỬA LỖI ---
+
+                if not pending_rows:
+                    st.info("Không có video nào đang chờ xử lý.")
+
+                # Dùng container cho mỗi item (Giữ nguyên)
+                for item in pending_rows:
+                    with st.container(border=True): 
+                        row_data = item["row_data"]
+                        row_index_gspread = item["gspread_index"]
+                        video_title = item["title"]
+
                         val_fb = str(row_data[IDX_FB_CHECK]).upper() == 'TRUE'
                         val_ig = str(row_data[IDX_IG_CHECK]).upper() == 'TRUE'
                         val_ready = str(row_data[IDX_READY_CHECK]).upper() == 'TRUE'
-                        val_error = str(row_data[IDX_ERROR_CHECK]).upper() == 'TRUE'
                         
-                        link_fb = row_data[IDX_FB_LINK] if IDX_FB_LINK != -1 else ""
-                        link_ig = row_data[IDX_IG_LINK] if IDX_IG_LINK != -1 else ""
-                    
-                    except IndexError:
-                        continue 
+                        COL_FB_CHECK_GSPREAD = IDX_FB_CHECK + 1
+                        COL_IG_CHECK_GSPREAD = IDX_IG_CHECK + 1
+                        COL_READY_CHECK_GSPREAD = IDX_READY_CHECK + 1
 
-                    COL_FB_CHECK_GSPREAD = IDX_FB_CHECK + 1
-                    COL_IG_CHECK_GSPREAD = IDX_IG_CHECK + 1
-                    COL_READY_CHECK_GSPREAD = IDX_READY_CHECK + 1
-                    COL_ERROR_CHECK_GSPREAD = IDX_ERROR_CHECK + 1
+                        key_fb = f"check_{row_index_gspread}_{COL_FB_CHECK_GSPREAD}"
+                        key_ig = f"check_{row_index_gspread}_{COL_IG_CHECK_GSPREAD}"
+                        key_ready = f"check_{row_index_gspread}_{COL_READY_CHECK_GSPREAD}"
 
-                    key_fb = f"check_{row_index_gspread}_{COL_FB_CHECK_GSPREAD}"
-                    key_ig = f"check_{row_index_gspread}_{COL_IG_CHECK_GSPREAD}"
-                    key_ready = f"check_{row_index_gspread}_{COL_READY_CHECK_GSPREAD}"
-                    key_error = f"check_{row_index_gspread}_{COL_ERROR_CHECK_GSPREAD}"
-
-                    row_cols = st.columns([4, 0.7, 0.7, 0.7, 0.7, 2])
-                    row_cols[0].write(video_title)
-                    
-                    row_cols[1].checkbox("FB", value=val_fb, key=key_fb, on_change=handle_tick, args=(row_index_gspread, COL_FB_CHECK_GSPREAD, key_fb, "facebook", video_title), label_visibility="collapsed")
-                    row_cols[2].checkbox("IG", value=val_ig, key=key_ig, on_change=handle_tick, args=(row_index_gspread, COL_IG_CHECK_GSPREAD, key_ig, "ig", video_title), label_visibility="collapsed")
-                    row_cols[3].checkbox("Ready", value=val_ready, key=key_ready, on_change=handle_tick, args=(row_index_gspread, COL_READY_CHECK_GSPREAD, key_ready, "ready", video_title), label_visibility="collapsed")
-                    row_cols[4].checkbox("Error", value=val_error, key=key_error, on_change=handle_tick, args=(row_index_gspread, COL_ERROR_CHECK_GSPREAD, key_error, "error", video_title), label_visibility="collapsed")
-
-                    # Hiển thị links
-                    with row_cols[5]:
-                        links_md = []
-                        if link_fb and "http" in str(link_fb):
-                            links_md.append(f"[Facebook]({link_fb})")
-                        if link_ig and "http" in str(link_ig):
-                            links_md.append(f"[Instagram]({link_ig})")
+                        row_cols = st.columns([4, 1, 1, 1])
+                        row_cols[0].write(video_title)
                         
-                        if links_md:
-                            st.markdown(" | ".join(links_md), unsafe_allow_html=True)
-                        else:
-                            st.caption("Chưa có link")
+                        # Code checkbox giữ nguyên (vì nó đã căn lề trái)
+                        row_cols[1].checkbox("FB", value=val_fb, key=key_fb, on_change=handle_tick, args=(row_index_gspread, COL_FB_CHECK_GSPREAD, key_fb, "facebook", video_title), label_visibility="collapsed")
+                        row_cols[2].checkbox("IG", value=val_ig, key=key_ig, on_change=handle_tick, args=(row_index_gspread, COL_IG_CHECK_GSPREAD, key_ig, "ig", video_title), label_visibility="collapsed")
+                        row_cols[3].checkbox("Ready", value=val_ready, key=key_ready, on_change=handle_tick, args=(row_index_gspread, COL_READY_CHECK_GSPREAD, key_ready, "ready", video_title), label_visibility="collapsed")
 
-# ==========================================================
-# ===== TÍNH NĂNG 4: BÁO CÁO (TRƯỚC LÀ TAB 5) =====
-# ==========================================================
 
-# --- [SỬA LỖI] THAY 'with tab_dashboard:' BẰNG 'elif ...' ---
+            # === TAB 2: ĐÃ ĐĂNG ===
+            with tab_published:
+                # (Tab này code đã đúng, không cần sửa)
+                st.subheader("Danh sách video đã đăng tải")
+                
+                header_cols = st.columns([4, 3])
+                header_cols[0].markdown(f"**{headers[IDX_TITLE]}**")
+                header_cols[1].markdown(f"**Links**")
+                st.divider()
+
+                if not published_rows:
+                    st.info("Chưa có video nào được đăng tải.")
+
+                for item in published_rows:
+                    with st.container(border=True): 
+                        video_title = item["title"]
+                        link_fb = item["link_fb"]
+                        link_ig = item["link_ig"]
+
+                        row_cols = st.columns([4, 3])
+                        row_cols[0].write(video_title)
+                        
+                        with row_cols[1]:
+                            links_md = []
+                            if link_fb and "http" in str(link_fb):
+                                links_md.append(f"[Facebook]({link_fb})")
+                            if link_ig and "http" in str(link_ig):
+                                links_md.append(f"[Instagram]({link_ig})")
+                            
+                            if links_md:
+                                st.markdown(" | ".join(links_md), unsafe_allow_html=True)
+                            else:
+                                st.caption("Không có link")
+            
+            # === TAB 3: BỊ LỖI ===
+            with tab_error:
+                st.subheader("Danh sách video bị lỗi")
+                st.caption("Các video này đã được đánh dấu 'Error' trong Sheet. Bạn có thể bỏ tick 'Error' ở đây để 'reset' và gửi lại video vào hàng chờ.")
+
+                # --- [SỬA LỖI CĂN LỀ] ---
+                # Bỏ HTML và dùng st.markdown đơn giản
+                header_cols = st.columns([4, 2])
+                header_cols[0].markdown(f"**{headers[IDX_TITLE]}**")
+                header_cols[1].markdown(f"**{headers[IDX_ERROR_CHECK]} (Bỏ tick để reset)**")
+                # --- KẾT THÚC SỬA LỖI ---
+                
+                st.divider()
+
+                if not error_rows:
+                    st.info("Không có video nào bị lỗi.")
+
+                for item in error_rows:
+                    with st.container(border=True): 
+                        row_index_gspread = item["gspread_index"]
+                        video_title = item["title"]
+
+                        COL_ERROR_CHECK_GSPREAD = IDX_ERROR_CHECK + 1
+                        key_error = f"check_{row_index_gspread}_{COL_ERROR_CHECK_GSPREAD}"
+
+                        row_cols = st.columns([4, 2])
+                        row_cols[0].write(video_title)
+                        
+                        # Code checkbox giữ nguyên (nó sẽ căn lề trái)
+                        row_cols[1].checkbox(
+                            "Error", 
+                            value=True, 
+                            key=key_error, 
+                            on_change=handle_tick, 
+                            args=(row_index_gspread, COL_ERROR_CHECK_GSPREAD, key_error, "error", video_title), 
+                            label_visibility="collapsed"
+                        )
+# ==========================================================
+# ===== TÍNH NĂNG 4: BÁO CÁO =====
+# ==========================================================
 elif active_tab_key == "4. Báo cáo Hiệu suất":
-# --- KẾT THÚC SỬA LỖI ---
     # === CĂN GIỮA TOÀN BỘ TAB ===
     _, main_col, _ = st.columns([0.5, 3, 0.5])
     with main_col:
+        
+        # --- [SỬA ĐỔI] CHUYỂN SANG LOGIC "THỦ CÔNG" (MANUAL) ---
+        
         st.header("🎬 Báo cáo Hiệu suất Video")
         
         report_sheet_name = "Engagement"
         st.caption(f"Dữ liệu từ sheet: **{report_sheet_name}**")
         
-        if st.button("Làm mới dữ liệu", key="refresh_tab_5_button"):
-            refresh_sheet_data(report_sheet_name, "sheet_data_report")
-
+        # [SỬA ĐỔI] Tách thành 2 nút
+        col_btn_1, col_btn_2 = st.columns(2)
+        
+        with col_btn_1:
+            if st.button("Lấy dữ liệu mới", key="refresh_tab_5_n8n_button", use_container_width=True):
+                with st.spinner("Đang thu thập dữ liệu mới..."):
+                    try:
+                        N8N_REPORT_WEBHOOK = "https://partible-terese-homocercal.ngrok-free.dev/webhook/b6f588e5-46c5-4e2d-9375-f80971ad4d84"
+                        
+                        # Dùng timeout ngắn (fire-and-forget)
+                        res = requests.post(N8N_REPORT_WEBHOOK, json={"event": "report_refresh_requested"}, timeout=5)
+                        
+                        if res.status_code == 200:
+                            st.success("Đã kích hoạt n8n thành công!")
+                            st.info("Dữ liệu đang được xử lý. Vui lòng bấm 'Tải lại dữ liệu' sau vài phút.")
+                        else:
+                            st.error(f"Kích hoạt n8n thất bại: {res.text}")
+                    
+                    except requests.exceptions.ReadTimeout:
+                         # Đây là điều MONG ĐỢI (fire-and-forget)
+                         st.success("Đã kích hoạt n8n thành công!")
+                         st.info("Dữ liệu đang được xử lý. Vui lòng bấm 'Tải lại dữ liệu' sau vài phút.")
+                    
+                    except Exception as e:
+                        st.error(f"Lỗi khi kích hoạt n8n: {e}")
+        
+        with col_btn_2:
+            if st.button("Tải lại dữ liệu (Xem kết quả)", key="refresh_tab_5_button", use_container_width=True):
+                refresh_sheet_data(report_sheet_name, "sheet_data_report")
+        
+        
+        # Logic hiển thị data
         if 'sheet_data_report' not in st.session_state:
-            st.info("Vui lòng bấm 'Làm mới' để tải dữ liệu.")
-        else:
+            st.info("Vui lòng bấm 'Tải lại dữ liệu' để xem báo cáo (hoặc 'Kích hoạt n8n' nếu muốn lấy dữ liệu mới nhất).")
+        
+        if 'sheet_data_report' in st.session_state:
             all_data = st.session_state['sheet_data_report']
             
             if not all_data or len(all_data) < 2:
@@ -692,13 +880,11 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                 # --- 1. Xử lý Header ---
                 header_row_index = -1
                 header_map = {}
-                
                 REQUIRED_KEY_COLUMN = "title" 
 
                 for i, row in enumerate(all_data):
                     if not row: continue
                     processed_row = [str(cell).strip().lower() for cell in row]
-                    
                     if REQUIRED_KEY_COLUMN in processed_row:
                         header_row_index = i
                         headers = [str(cell).strip().lower() for cell in all_data[header_row_index]]
@@ -711,7 +897,6 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
 
                 # --- 2. Dropdown chọn Video ---
                 video_options = {} 
-                
                 try:
                     title_col_index = header_map[REQUIRED_KEY_COLUMN]
                 except KeyError:
@@ -723,7 +908,7 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                     try:
                         title_text = row[title_col_index]
                         if title_text:
-                            video_options[f"{title_text} (Hàng {i+1})"] = i
+                            video_options[f"{title_text}"] = i
                     except IndexError:
                         continue
                 
@@ -737,7 +922,6 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                     selected_row_index = video_options[selected_key]
                     selected_row_data = all_data[selected_row_index]
                     
-                    # Hàm lấy data an toàn
                     def get_val(key, is_json=False):
                         try:
                             col_idx = header_map[key.lower().replace(" ", "")]
@@ -753,16 +937,13 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                     avg_time = get_val('avgwatchtimesec')
                     avg_ratio = get_val('avgwatchratio')
                     eng_rate = get_val('engagementrate')
-                    
                     replay_count = get_val('replaycount')
                     total_eng = get_val('totalengagements')
-                    
                     retention_data = get_val('retentiongraph', is_json=True)
                     social_data = get_val('socialgained', is_json=True)
 
                     st.markdown("---")
                     
-                    # --- A. KPI Metrics ---
                     st.subheader("⚡ Chỉ số chính")
                     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                     kpi1.metric("Total Views", f"{int(total_views):,}")
@@ -770,7 +951,6 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                     kpi3.metric("Watch Ratio", f"{avg_ratio}%")
                     kpi4.metric("Engagement Rate", f"{eng_rate}%")
                     
-                    # --- B. Charts Layout ---
                     col_chart_1, col_chart_2 = st.columns(2)
                     
                     with col_chart_1:
@@ -789,7 +969,6 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                         else:
                             st.info("Chưa có dữ liệu Retention.")
 
-                    # --- C. Social Actions ---
                     st.subheader("👍 Hành động xã hội (Social Actions)")
                     if social_data and any(social_data.values()):
                         df_social = pd.DataFrame(list(social_data.items()), columns=['Action', 'Count'])
@@ -797,4 +976,4 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
                         df_social = df_social.sort_values(by='Count', ascending=True)
                         st.bar_chart(df_social, horizontal=True)
                     else:
-                        st.caption("Không có dữ liệu Social Action.")
+                        st.caption("Không có dữliệu Social Action.")

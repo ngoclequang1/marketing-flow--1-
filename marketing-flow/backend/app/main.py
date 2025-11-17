@@ -11,22 +11,18 @@ load_dotenv()
 
 import json
 import asyncio
-import re # <-- THÊM IMPORT
-from app.services.sheets import export_rows, read_sheet_data, update_sheet_cell # <-- THÊM IMPORT
+import re 
+import requests # <-- Giữ lại cho Tool 3
+from pydantic import BaseModel # <-- Giữ lại cho Tool 3
+from app.services.sheets import export_rows, read_sheet_data, update_sheet_cell 
 from gspread_asyncio import AsyncioGspreadClient
-from app.media import remix_video_by_scenes, SceneSegment
+from app.media import remix_video_by_scenes, SceneSegment, auto_subtitle_and_bgm
 from app.routers.video import SPREADSHEET_ID
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 from app.dependencies import get_sheet_client
 
-# === [MỚI] THÊM BỘ NHỚ ĐỆM CHO STREAMING ===
-# Dùng để lưu trữ các "sự kiện" (events) mà streamer đang chờ
-STREAMING_EVENTS: Dict[str, asyncio.Event] = {}
-# Dùng để lưu trữ "kết quả" (links) mà callback trả về
-STREAMING_RESULTS: Dict[str, Dict] = {}
-# ==========================================
-# 1. Imports
+# ... (STREAMING_EVENTS, STREAMING_RESULTS, Imports, Lifespan giữ nguyên) ...
 from fastapi import (
     FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, Depends
 )
@@ -34,22 +30,13 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-
-# --- THÊM: Imports cho Lifespan (Google Sheets) ---
 from contextlib import asynccontextmanager
 from app.services.sheets import _get_async_client_manager
 from app.dependencies import get_sheet_client 
-# ---------------------------------------------------
-
-# --- IMPORT CHỨC NĂNG TỪ MEDIA ---
 from .media import auto_subtitle_and_bgm, flip_video_horizontal, upload_to_dropbox
-# ------------------------------------
-
-# 2. Correctly import all routers
 from app.routers import analyze, keywords, export, mvp, video
 from app.routers.video import _to_public_url
 
-# ---- 3. THÊM: Định nghĩa Lifespan cho Google Sheets ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Server đang khởi động...")
@@ -66,10 +53,7 @@ async def lifespan(app: FastAPI):
     yield
     
     print("Server đang tắt.")
-# ------------------------------------------------------
 
-
-# 4. SỬA: Khởi tạo FastAPI với Lifespan
 app = FastAPI(
     title="Marketing Flow Automation",
     description="MVP: Analyze URL+Keyword combined (Gemini), plus individual endpoints",
@@ -77,11 +61,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# ---- 5. Job Status "Database" ----
 JOB_STATUS: Dict[str, Dict] = {}
 
-
-# ---- 6. Helper function (Hàm CŨ của Tool 3) - [ĐÃ SỬA SANG ASYNC] ----
+# ... (Hàm run_video_job giữ nguyên) ...
 async def run_video_job(
     job_id: str,
     temp_video_path: str,
@@ -92,9 +74,6 @@ async def run_video_job(
     temp_workdir: Path,
     flip_video: bool
 ):
-    """
-    Hàm xử lý nền CŨ (cho endpoint /process) - ĐÃ CHUYỂN SANG ASYNC.
-    """
     try:
         video_to_process = temp_video_path
         
@@ -126,19 +105,25 @@ async def run_video_job(
         if temp_workdir.exists():
             shutil.rmtree(temp_workdir)
 
-# --- CÁC HÀM HELPER MỚI (CHO Tool 3 MỚI) ---
+# --- [GIỮ LẠI] HELPER GỌI WEBHOOK NỀN (CHO TOOL 3) ---
+def call_n8n_webhook_in_background(
+    webhook_url: str, 
+    payload: dict
+):
+    try:
+        requests.post(webhook_url, json=payload, timeout=5)
+        print(f"Đã kích hoạt webhook cho job: {payload.get('callback_job_id')}")
+    except requests.exceptions.ReadTimeout:
+        pass 
+    except Exception as e:
+        print(f"LỖI khi gọi webhook nền: {e}")
+# --- KẾT THÚC ---
 
-# [THÊM MỚI] Hàm chuẩn hóa URL (sao chép từ video.py)
+# ... (Hàm _normalize_tiktok_url_main, _find_sheet_cell_coords_main, _upload_and_update_remix_sheet, run_remix_job giữ nguyên) ...
 def _normalize_tiktok_url_main(url: str) -> str:
-    """
-    Helper function copied from video.py to normalize URLs.
-    """
     if not url: return ""
-    # Get URL before any query parameters
     url_no_params = url.split('?')[0]
     return url_no_params
-
-# [THÊM MỚI] Hàm tìm tọa độ ô
 async def _find_sheet_cell_coords_main(
     gc: AsyncioGspreadClient,
     sheet_title: str,
@@ -146,77 +131,50 @@ async def _find_sheet_cell_coords_main(
     target_col_name: str,
     url_col_name: str = "Link Video gốc"
 ) -> (Optional[int], Optional[int]):
-    """
-    Tìm (Hàng, Cột) 1-based để cập nhật, dựa trên URL đã được chuẩn hóa.
-    """
     try:
         data = await read_sheet_data(gc, SPREADSHEET_ID, sheet_title)
-        
         if not data:
             print(f"[main.py] Sheet '{sheet_title}' trống.")
             return None, None
-        
         headers = [str(h).strip().lower() for h in data[0]]
-        
         try:
             url_col_idx = headers.index(url_col_name.lower())
         except ValueError:
             print(f"[main.py] LỖI: Không tìm thấy cột URL '{url_col_name}' in sheet '{sheet_title}'.")
             return None, None
-            
         try:
             target_col_idx = headers.index(target_col_name.lower())
         except ValueError:
             print(f"[main.py] LỖI: Không tìm thấy cột Target '{target_col_name}' in sheet '{sheet_title}'.")
             return None, None
-
-        # Lặp qua dữ liệu (bỏ qua header) để tìm URL
         for i, row in enumerate(data[1:]):
             if not row or len(row) <= url_col_idx:
                 continue
-                
             sheet_url_raw = row[url_col_idx]
             if not sheet_url_raw:
                 continue
-            
             sheet_url_normalized = _normalize_tiktok_url_main(sheet_url_raw)
-            
             if sheet_url_normalized == lookup_url: 
-                target_row = i + 2  # +1 vì bỏ qua header, +1 vì gspread 1-based
-                target_col = target_col_idx + 1 # +1 vì gspread 1-based
+                target_row = i + 2
+                target_col = target_col_idx + 1
                 return target_row, target_col
-                
         print(f"[main.py] CẢNH BÁO: Không tìm thấy URL '{lookup_url}' in column '{url_col_name}'.")
         return None, None
-
     except Exception as e:
         print(f"[main.py] Lỗi khi đọc/tìm kiếm sheet '{sheet_title}': {e}")
         return None, None
-
-
-# [SỬA ĐỔI] Hàm upload (để tìm và cập nhật, thay vì append)
 async def _upload_and_update_remix_sheet(
     gc: AsyncioGspreadClient,
     local_file_path: str,
     keyword: str,
     source_url: str
 ) -> str:
-    """
-    Tải file lên Dropbox và CẬP NHẬT sheet "Source Chỉnh sửa Video".
-    Trả về link Dropbox.
-    """
     SHEET_TITLE = "Source Chỉnh sửa Video"
     URL_COLUMN = "Link Video gốc"
     TARGET_COLUMN = "Remix Video Link"
-    
-    # 1. Tải lên Dropbox
     dropbox_url = upload_to_dropbox(local_file_path)
     print(f"Đã tải lên Dropbox: {dropbox_url}")
-    
-    # 2. Chuẩn bị tìm kiếm
     normalized_lookup_url = _normalize_tiktok_url_main(source_url)
-    
-    # 3. Tìm ô cần cập nhật
     (target_row, target_col) = await _find_sheet_cell_coords_main(
         gc,
         SHEET_TITLE,
@@ -224,8 +182,6 @@ async def _upload_and_update_remix_sheet(
         TARGET_COLUMN,
         URL_COLUMN
     )
-    
-    # 4. Cập nhật ô nếu tìm thấy
     if target_row and target_col:
         print(f"[main.py] Đang cập nhật sheet '{SHEET_TITLE}' tại ô (R{target_row}, C{target_col})...")
         await update_sheet_cell(
@@ -234,15 +190,12 @@ async def _upload_and_update_remix_sheet(
             SHEET_TITLE,
             target_row,
             target_col,
-            dropbox_url # <-- Đặt link Dropbox vào ô
+            dropbox_url
         )
         print(f"[main.py] Cập nhật link Dropbox vào sheet thành công.")
     else:
         print(f"[main.py] CẢNH BÁO: Không tìm thấy hàng cho URL '{normalized_lookup_url}' trong sheet '{SHEET_TITLE}'. Không thể cập nhật link Dropbox.")
-
     return dropbox_url
-
-
 async def run_remix_job(
     job_id: str,
     gc: AsyncioGspreadClient, 
@@ -252,29 +205,22 @@ async def run_remix_job(
     keyword: str,
     do_remix: bool,
     highlights_json: str,
+    segments_json: str,
     bgm_path_str: Optional[str],
     remove_original_audio: bool,
     burn_in: bool,
     flip_video: bool
 ):
-    """
-    Quy trình nền mới: Remix -> Flip -> Subtitle/BGM -> Upload - ĐÃ CHUYỂN SANG ASYNC.
-    """
     try:
         video_to_process = source_video_path
-        
-        # --- BƯỚC 1: REMIX (Nếu được yêu cầu) ---
         if do_remix:
             print(f"[{job_id}] Bắt đầu Remix...")
             try:
                 highlights_data = json.loads(highlights_json)
                 highlights = [SceneSegment(**s) for s in highlights_data if s]
-                
                 if not highlights:
                     raise ValueError("Không có highlights hợp lệ để remix.")
-                    
                 remix_path = str(temp_workdir / "remixed.mp4")
-                
                 await run_in_threadpool(
                     remix_video_by_scenes,
                     video_to_process, 
@@ -286,8 +232,6 @@ async def run_remix_job(
             except Exception as e_remix:
                 print(f"[{job_id}] LỖI Remix: {e_remix}. Sẽ dùng video gốc.")
                 video_to_process = source_video_path 
-
-        # --- BƯỚC 2: FLIP (Nếu được yêu cầu) ---
         if flip_video:
             print(f"[{job_id}] Bắt đầu Flip...")
             flipped_path = str(temp_workdir / "flipped.mp4")
@@ -299,47 +243,75 @@ async def run_remix_job(
                 JOB_STATUS[job_id] = {"status": "failed", "error": f"Failed to flip video: {e_flip}"}
                 shutil.rmtree(temp_workdir)
                 return
-
-        # --- BƯỚC 3: TẠO PHỤ ĐỀ / BGM ---
         print(f"[{job_id}] Bắt đầu Subtitle/BGM...")
-        
         stem = Path(video_to_process).stem
         out_name = f"{stem}_{job_id}.mp4" if burn_in else f"{stem}_{job_id}.mkv"
         final_output_path = str(EXPORTS_DIR / out_name)
-
         await run_in_threadpool(
             auto_subtitle_and_bgm,
             video_path=video_to_process,
             output_path=final_output_path,
             bgm_path=bgm_path_str,
             language=None, 
+            segments_json=segments_json,
             burn_in=burn_in,
             remove_original_audio=remove_original_audio,
             do_upload=False 
         )
         print(f"[{job_id}] Subtitle/BGM hoàn tất. Path: {final_output_path}")
-
-        # --- BƯỚC 4: UPLOAD VÀ CẬP NHẬT SHEET ---
         print(f"[{job_id}] Bắt đầu Upload và cập nhật Sheet...")
-        
         await _upload_and_update_remix_sheet(
             gc=gc,
             local_file_path=final_output_path,
             keyword=keyword,
             source_url=source_url
         )
-        
-        # --- BƯỚC 5: HOÀN TẤT JOB ---
         JOB_STATUS[job_id] = {"status": "complete", "path": final_output_path}
-    
     except Exception as e:
         print(f"[{job_id}] LỖI NGHIÊM TRỌNG: {e}")
         JOB_STATUS[job_id] = {"status": "failed", "error": str(e)}
-    
     finally:
         if temp_workdir.exists():
             shutil.rmtree(temp_workdir)
-    
+
+# --- [GIỮ LẠI] ENDPOINTS CHO POLLING (CHỈ DÀNH CHO TOOL 3) ---
+class PublishRequest(BaseModel):
+    row_index: int
+    video_title: str
+    webhook_url: str 
+
+# (ĐÃ XÓA endpoint /reports/start-refresh và class ReportRefreshRequest)
+
+@app.post("/publish/start", tags=["Publishing"])
+async def start_publishing_job(
+    req: PublishRequest,
+    background_tasks: BackgroundTasks
+):
+    job_id = str(uuid4())
+    JOB_STATUS[job_id] = {"status": "processing"}
+    n8n_payload = {
+        "row_index": req.row_index,
+        "title": req.video_title,
+        "event": "ready_for_processing",
+        "callback_job_id": job_id
+    }
+    background_tasks.add_task(
+        call_n8n_webhook_in_background,
+        req.webhook_url,
+        n8n_payload
+    )
+    return {"status": "processing", "job_id": job_id}
+
+@app.post("/publish/complete/{job_id}", tags=["Publishing"])
+async def complete_publishing_job(job_id: str):
+    if job_id not in JOB_STATUS:
+        print(f"CẢNH BÁO: Job ID {job_id} không tìm thấy trong JOB_STATUS.")
+        return {"status": "job_not_found", "job_id": job_id}
+    JOB_STATUS[job_id] = {"status": "complete"}
+    print(f"Job {job_id} đã hoàn tất.")
+    return {"status": "complete", "job_id": job_id}
+# --- [KẾT THÚC] ---
+
 
 # ---- CORS ----
 app.add_middleware(
@@ -370,13 +342,12 @@ app.mount("/media", StaticFiles(directory=MEDIA_ROOT), name="media")
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
+# ... (các endpoint debug khác giữ nguyên) ...
 @app.get("/debug/ffmpeg_cmd")
 def debug_ffmpeg_cmd():
     from app.routers.video import _resolve_ffmpeg_path
     exe = _resolve_ffmpeg_path()
     return {"ffmpeg_bin": exe}
-
 @app.get("/debug/ffmpeg")
 def debug_ffmpeg():
     import subprocess
@@ -390,7 +361,6 @@ def debug_ffmpeg():
         return {"ok": True, "bin": exe, "version": out.stdout.splitlines()[0]}
     except Exception as e:
         return {"ok": False, "bin": exe, "err": str(e)}
-
 
 # ---- Auto-subtitle endpoint (Tool 3 CŨ) ----
 @app.post("/process", tags=["Video"])
@@ -438,7 +408,7 @@ async def process_video(
     JOB_STATUS[job_id] = {"status": "processing"}
 
     background_tasks.add_task(
-        run_video_job, # <--- Gọi hàm async run_video_job
+        run_video_job, 
         job_id,
         str(video_path),
         str(out_path),
@@ -458,17 +428,15 @@ async def process_remix_video(
     background_tasks: BackgroundTasks,
     gc: AsyncioGspreadClient = Depends(get_sheet_client), 
     
-    # Dữ liệu từ Form
     source_video_path: str = Form(...),
     source_url: str = Form(...),
     keyword: str = Form(...),
     do_remix: bool = Form(False),
     highlights_json: str = Form("[]"),
+    segments_json: str = Form("[]"),
     remove_original_audio: bool = Form(False),
     burn_in: bool = Form(True),
     flip_video: bool = Form(False),
-    
-    # File BGM (tùy chọn)
     bgm: Optional[UploadFile] = File(None)
 ):
     job_id = str(uuid4())
@@ -485,7 +453,7 @@ async def process_remix_video(
                     await run_in_threadpool(shutil.copyfileobj, bgm.file, f)
             finally:
                 await bgm.close()
-            bgm_path_str = str(bgm_path) # <-- LỖI TYPO CŨ VẪN CÒN
+            bgm_path_str = str(bgm_path) # <-- ĐÃ SỬA LỖI TYPO (từ bgGg)
             
         if not os.path.exists(source_video_path):
              raise HTTPException(status_code=404, detail=f"Source video path not found: {source_video_path}")
@@ -496,7 +464,7 @@ async def process_remix_video(
     JOB_STATUS[job_id] = {"status": "processing"}
 
     background_tasks.add_task(
-        run_remix_job, # <--- Gọi hàm async run_remix_job
+        run_remix_job,
         job_id,
         gc,
         workdir,
@@ -505,6 +473,7 @@ async def process_remix_video(
         keyword,
         do_remix,
         highlights_json,
+        segments_json,
         bgm_path_str,
         remove_original_audio,
         burn_in,
@@ -512,6 +481,7 @@ async def process_remix_video(
     )
 
     return {"status": "processing", "job_id": job_id}
+
 
 
 # ---- Endpoint to check job status ----
@@ -535,4 +505,3 @@ def get_job_status(job_id: str):
         return {"status": "complete", "download_url": public_url}
         
     return status
-
