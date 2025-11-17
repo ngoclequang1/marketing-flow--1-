@@ -380,7 +380,7 @@ elif active_tab_key == "2. Chỉnh sửa Video":
             st.session_state.tt_analysis_results = {}
 
         tt_url = st.text_input("Dán URL video TikTok", key="remix_url")
-        tt_keyword = st.text_input("Nhập Keyword (Bắt buộc)", key="remix_keyword")
+        tt_keyword = st.text_input("Nhập Keyword ", key="remix_keyword")
         language = st.selectbox(
             "Chọn ngôn ngữ của video",
             options=["vi", "en", "auto"],
