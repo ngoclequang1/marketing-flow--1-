@@ -447,7 +447,7 @@ elif active_tab_key == "2. Chỉnh sửa Video":
             st.divider()
 
             # [SỬA UI/UX] Đổi tiêu đề và bỏ cột 'reason'
-            st.subheader("🎬 Phụ đề của Video (Đã sửa lỗi)") 
+            st.subheader("🎬 Phụ đề của Video ") 
             all_segments_data = data.get('all_segments', [])
             
             if not all_segments_data:
@@ -561,7 +561,7 @@ elif active_tab_key == "2. Chỉnh sửa Video":
                             if not job_id:
                                 st.error("API không trả về job_id")
                             else:
-                                status_placeholder.info(f"Đang xử lý... (Job ID: {job_id[:8]})")
+                                status_placeholder.info(f"Đang xử lý... ")
                                 
                                 download_url = None
                                 while True:
