@@ -869,7 +869,7 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
         
         # Logic hiển thị data
         if 'sheet_data_report' not in st.session_state:
-            st.info("Vui lòng bấm 'Tải lại dữ liệu' để xem báo cáo (hoặc 'Kích hoạt n8n' nếu muốn lấy dữ liệu mới nhất).")
+            st.info("Vui lòng bấm 'Tải lại dữ liệu' để xem báo cáo (hoặc 'Lấy dữ liệu mới' nếu muốn lấy dữ liệu mới nhất).")
         
         if 'sheet_data_report' in st.session_state:
             all_data = st.session_state['sheet_data_report']
