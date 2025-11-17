@@ -1,164 +1,142 @@
-# Marketing Flow Automation
+# 🤖 Project: Marketing Flow Automation (MFA)
 
-Dự án này là một hệ thống backend (sử dụng FastAPI) và frontend (sử dụng React) được thiết kế để tự động hóa các tác vụ marketing. Nó kết hợp phân tích đối thủ, nghiên cứu từ khóa, phân tích video viral, và một studio xử lý video mạnh mẽ sử dụng AI để tạo phụ đề và tùy chỉnh âm thanh.
+Đây là một dự án full-stack (FastAPI + Streamlit) được thiết kế để tự động hóa các quy trình marketing phức tạp, từ phân tích nội dung, chỉnh sửa video, đến quản lý đăng tải và báo cáo hiệu suất.
 
-## Các tính năng chính
+Hệ thống này sử dụng Google Sheets làm cơ sở dữ liệu chính và tích hợp mạnh mẽ với **n8n** để xử lý các tác vụ nền.
 
-* **Phân tích MVP (All-in-One):**
-    * **Input:** Một URL (trang web, TikTok) và một Từ khóa chính.
-    * **Output:** Một báo cáo đầy đủ bao gồm:
-        * Phân tích SEO/nội dung của URL (sử dụng Gemini).
-        * Dữ liệu Google Trends cho từ khóa (sử dụng `pytrends`).
-        * Một bản nháp nội dung (bài đăng, outline blog) do Gemini tạo ra.
+## 🏛️ Kiến trúc tổng quan
 
-* **Studio Xử lý Video (Thông qua Job Polling):**
-    * **Phiên âm (Transcription):** Tự động tạo phụ đề cho video bằng `faster-whisper`.
-    * **Đốt phụ đề (Hardsub):** Ghi đè phụ đề trực tiếp lên video (tùy chọn).
-    * **Xử lý âm thanh (BGM):**
-        * **Thay thế:** Xóa âm thanh gốc và thay bằng nhạc nền (BGM) mới.
-        * **Trộn (Audio Ducking):** Giữ lại giọng nói và tự động giảm âm lượng BGM khi có người nói (sử dụng `sidechaincompress`).
-    * **Lật Video (Flip):** Lật video theo chiều ngang (trái sang phải).
-    * **Hệ thống Job (Job System):** Xử lý các video dài (ví dụ: 5 phút) một cách đáng tin cậy bằng cách sử dụng `BackgroundTasks` và cơ chế polling (hỏi thăm) từ frontend, tránh bị timeout.
+Dự án này bao gồm hai phần chính:
 
-* **Phân tích Video Viral (TikTok):**
-    * Tải video từ link TikTok (sử dụng `yt-dlp`).
-    * Tách file âm thanh gốc (MP3/WAV).
-    * Phân tích video và chia thành các "cảnh" (scene) với dấu thời gian (timestamp).
+* **`backend` (FastAPI):** Một máy chủ API mạnh mẽ xử lý tất cả các tác vụ nặng:
+    * Tải video (`yt-dlp`).
+    * Phiên âm (Transcription) bằng `faster-whisper`.
+    * Phân tích và sửa lỗi AI (`google-gemini`).
+    * Xử lý video (cắt, nối, hardsub) bằng `ffmpeg`.
+    * Giao tiếp với Google Sheets và Dropbox.
+    * Quản lý hàng đợi (job queue) cho các tác vụ nền.
 
-* **Tích hợp Google Sheets:**
-    * Tự động xuất kết quả phân tích MVP sang một Google Sheet được chỉ định.
+* **`frontend` (Streamlit):** Một dashboard tương tác cho phép người dùng:
+    * Kích hoạt các quy trình.
+    * Xem và chỉnh sửa phụ đề.
+    * Tạo video remix.
+    * Quản lý lịch đăng.
+    * Xem báo cáo.
 
-## Công nghệ sử dụng
+* **Các dịch vụ bên ngoài:**
+    * **Google Sheets:** Đóng vai trò là cơ sở dữ liệu (lưu trữ phụ đề, highlights, trạng thái đăng bài, dữ liệu báo cáo).
+    * **n8n:** Xử lý các quy trình tự động (auto-posting lên Facebook/Instagram, thu thập dữ liệu báo cáo).
+    * **Dropbox:** Lưu trữ các file video đã chỉnh sửa.
 
-* **Backend:**
-    * `FastAPI`: Framework API Python.
-    * `Uvicorn`: Server ASGI.
-* **Frontend:**
-    * `React.js`
-* **AI & Media Processing:**
-    * `google-generativeai`: Dành cho phân tích và sáng tạo nội dung (Gemini).
-    * `faster-whisper`: Dành cho phiên âm (transcription) đa ngôn ngữ, tốc độ cao.
-    * `ffmpeg`: Công cụ cốt lõi cho mọi tác vụ xử lý video và âm thanh (lật, trộn, đốt phụ đề).
-    * `opencv-python`: Dành cho phân tích cảnh (scene analysis).
-* **Data & APIs:**
-    * `yt-dlp`: Tải video từ TikTok và các nền tảng khác.
-    * `playwright`: Crawl các trang web nặng về JavaScript.
-    * `beautifulsoup4`: Phân tích (parse) HTML.
-    * `pytrends`: Lấy dữ liệu Google Trends.
-    * `gspread-asyncio`: Tương tác bất đồng bộ với Google Sheets.
 
-## Cài đặt và Chạy
 
-Dự án được chia thành hai phần: `backend` và `frontend`.
+[Image of full-stack application architecture diagram]
+
+
+## ✨ Tính năng chính
+
+Dashboard được chia thành 4 công cụ (tabs) chính:
+
+### 1. Phân tích Video Tiktok
+
+* **Mô tả:** Người dùng cung cấp URL TikTok và Keyword.
+* **Hành động:** Hệ thống tải video, chạy phiên âm (Whisper), gửi bản thô cho AI (Gemini) sửa lỗi, và lưu bản đã sửa vào Google Sheet (Tab `Source Phân tích Video`).
+* **Webhook:** Kích hoạt n8n để chạy phân tích AI (ví dụ: tạo "Điểm mạnh", "Điểm yếu").
+
+### 2. Chỉnh sửa Video
+
+* **Mô tả:** Một quy trình 2 bước để tạo video remix.
+* **Bước 1 (Phân tích):** Giống như Tool 1, nhưng lưu vào tab `Source Chỉnh sửa Video` và AI (Gemini) sẽ tìm các "Highlights" (đoạn hay).
+* **Bước 2 (Tạo video):** Người dùng chọn các tùy chọn (Remix từ highlights, thêm nhạc nền, hardsub, lật video). Hệ thống sẽ dùng `ffmpeg` để tạo video cuối cùng, tải lên Dropbox, và cập nhật link vào Google Sheet.
+
+### 3. Đăng tải Đa nền tảng
+
+* **Mô tả:** Giao diện đọc Google Sheet (Tab `MVP_Content_Plan`) và hiển thị 3 danh sách: "Chờ xử lý", "Đã đăng", "Bị lỗi".
+* **Hành động:** Khi người dùng tick vào "Ready", giao diện sẽ gọi backend. Backend sẽ kích hoạt webhook n8n (Tool 3) để bắt đầu quy trình đăng bài.
+* **Polling:** Giao diện sẽ tự động poll (kiểm tra) backend mỗi 10 giây để xem n8n đã hoàn thành chưa. Khi hoàn tất, nó sẽ tự động làm mới để hiển thị link (nếu có).
+
+### 4. Báo cáo Hiệu suất
+
+* **Mô tả:** Một dashboard chỉ đọc (read-only) để trực quan hóa dữ liệu từ tab "Engagement" trên Google Sheet.
+* **Hành động:** Người dùng bấm "Kích hoạt n8n" để yêu cầu n8n thu thập dữ liệu mới. n8n chạy nền (mất vài phút) và cập nhật vào "Engagement".
+* **Polling:** Giao diện poll backend để biết khi nào n8n làm xong, sau đó tự động tải dữ liệu mới về và vẽ biểu đồ (KPIs, Lượt xem, Tương tác, Tỷ lệ giữ chân).
+
+## 🚀 Cài đặt và Cấu hình
+
+### Điều kiện tiên quyết
+
+* Python 3.10+
+* `ffmpeg` (phải được cài đặt trên hệ thống và thêm vào biến môi trường PATH)
+* Tài khoản Google Cloud (với file JSON credentials cho Google Sheets & Gemini API).
+* Tài khoản Dropbox (với Access Token).
+* Một hệ thống n8n đang chạy (để nhận webhook).
 
 ### 1. Backend (FastAPI)
 
-1.  **Clone dự án:**
+1.  Di chuyển vào thư mục `backend`:
     ```bash
-    git clone [URL_REPOSITORY_CUA_BAN]
-    cd [TEN_THU_MUC_DU_AN]/backend
+    cd backend
     ```
 
-2.  **Tạo môi trường ảo (virtual environment):**
+2.  Tạo và kích hoạt môi trường ảo:
     ```bash
+    # Windows
     python -m venv .venv
-    source .venv/bin/activate  # Trên macOS/Linux
-    .\.venv\Scripts\activate   # Trên Windows (PowerShell)
+    .\.venv\Scripts\activate
+    
+    # macOS / Linux
+    python3 -m venv .venv
+    source .venv/bin/activate
     ```
 
-3.  **Cài đặt các thư viện Python:**
-    (Sử dụng file `requirements.txt` đã được cung cấp)
+3.  Cài đặt các thư viện trong `backend`:
+    ```
+    chạy:
     ```bash
     pip install -r requirements.txt
     ```
 
-4.  **Cài đặt trình duyệt Playwright (Bắt buộc):**
-    Thư viện `playwright` cần tải về các trình duyệt.
-    ```bash
-    playwright install
-    ```
-
-5.  **Cài đặt FFmpeg (Bắt buộc cho video):**
-    Hệ thống này yêu cầu `ffmpeg` và `ffprobe` để xử lý mọi tác vụ video (tạo phụ đề, lật video, trộn âm thanh).
-
-    * **Trên Windows:**
-        1.  Truy cập [ffmpeg.org/download.html](https://ffmpeg.org/download.html) và tải về bản build cho Windows (thường được khuyên dùng là từ **gyan.dev**).
-        2.  Tải bản "essentials" build (ví dụ: `ffmpeg-7.0.1-essentials_build.zip`).
-        3.  Giải nén file zip vào một thư mục cố định (ví dụ: `E:\tools\ffmpeg\`).
-        4.  Đường dẫn bạn cần sẽ trỏ vào thư mục `bin` bên trong, ví dụ: `E:\tools\ffmpeg\bin\ffmpeg.exe` và `E:\tools\ffmpeg\bin\ffprobe.exe`.
-
-    * **Trên macOS (sử dụng Homebrew):**
-        ```bash
-        brew install ffmpeg
-        ```
-
-    * **Trên Linux (sử dụng apt):**
-        ```bash
-        sudo apt update && sudo apt install ffmpeg
-        ```
-    *Nếu bạn cài đặt trên macOS hoặc Linux, `ffmpeg` thường sẽ tự động được thêm vào PATH hệ thống, bạn có thể không cần cấu hình `FFMPEG_BIN` trong bước tiếp theo.*
-
-6.  **Cấu hình Môi trường (`.env`):**
-    Tạo một file tên là `.env` trong thư mục `backend` và điền các giá trị:
-    ```dotenv
-    # API Keys
-    GEMINI_API_KEY="AIza..."
+4.  Tạo tệp `.env` trong thư mục `backend` và điền các biến môi trường:
+    ```ini
+    # API Key của Google Gemini
+    GEMINI_API_KEY="AIz..."
     
-    # Đường dẫn đến file service account JSON của Google
-    # (Bắt buộc cho Google Sheets)
-    GOOGLE_APPLICATION_CREDENTIALS="duong/dan/den/file-credentials.json"
+    # (Lựa chọn 1) Đường dẫn đến file service account .json của Google
+    GOOGLE_APPLICATION_CREDENTIALS="C:\path\to\your-google-credentials.json"
     
-    # Đường dẫn tuyệt đối đến file ffmpeg.exe và ffprobe.exe
-    # (Rất quan trọng cho việc xử lý video, đặc biệt trên Windows)
-    FFMPEG_BIN="E:\tools\ffmpeg\bin\ffmpeg.exe"
-    FFPROBE_BIN="E:\tools\ffmpeg\bin\ffprobe.exe"
+    # (Lựa chọn 2) Thay thế token cứng trong media.py bằng biến này
+    DROPBOX_ACCESS_TOKEN="sl.u.A..."
     
-    # Tùy chọn (Tắt các tính năng để debug)
-    # MFA_LLM_OFF="1"         # Tắt các cuộc gọi đến Gemini
-    # MFA_TRENDS_OFF="1"      # Tắt các cuộc gọi đến Google Trends
-    # MFA_TIKTOK_RENDER="1"   # Bật Playwright để crawl TikTok (chậm hơn)
+    # (Tùy chọn) Nếu ffmpeg không nằm trong PATH
+    FFMPEG_BIN="C:\ffmpeg\bin\ffmpeg.exe"
     ```
 
-7.  **Chạy server backend:**
+### 2. Frontend (Streamlit)
+
+1.  Mở một cửa sổ dòng lệnh (terminal) **mới**.
+
+2.  Di chuyển vào thư mục `frontend`:
     ```bash
-    uvicorn app.main:app --reload --port 8080
+    cd frontend
     ```
-    Server sẽ chạy tại `http://localhost:8080`.
 
-### 2. Frontend (React)
-
-1.  **Mở một terminal mới** và đi đến thư mục frontend:
+3.  Cài đặt các thư viện trong `frontend`:
+    chạy:
     ```bash
-    cd ../frontend
+    pip install -r requirements-frontend.txt
     ```
 
-2.  **Cài đặt các gói Node.js:**
-    ```bash
-    npm install
-    ```
+## 🏃 Cách chạy
 
-3.  **Cấu hình Môi trường (`.env.local`):**
-    Tạo một file `.env.local` trong thư mục `frontend` để nó biết địa chỉ backend:
-    ```dotenv
-    NEXT_PUBLIC_API="http://localhost:8080"
-    ```
+Bạn cần chạy 2 máy chủ song song trên 2 cửa sổ terminal riêng biệt.
 
-4.  **Chạy server frontend:**
-    ```bash
-    npm run dev
-    ```
-    Ứng dụng sẽ chạy tại `http://localhost:3000`.
-
-## Tổng quan API Endpoints
-
-Đây là các endpoint chính được định nghĩa trong `app.main:app`:
-
-* `POST /mvp/run`: Chạy phân tích MVP (URL + Keyword) đầy đủ.
-* `POST /video/viral-analyze`: Phân tích một link TikTok.
-* `POST /process`: **Endpoint chính (Job)**. Bắt đầu một tác vụ xử lý video (sub, BGM, lật). Trả về một `job_id`.
-* `GET /process/status/{job_id}`: **Endpoint Polling**. Frontend dùng để kiểm tra trạng thái của job xử lý.
-* `GET /keywords`: Chỉ lấy dữ liệu từ khóa.
-* `POST /analyze/url`: Chỉ phân tích một URL.
-* `POST /export/sheet`: Chỉ xuất dữ liệu sang Google Sheets.
-* `GET /health`: Kiểm tra xem server có đang chạy không.
-* `GET /debug/ffmpeg`: Kiểm tra xem `ffmpeg` đã được cấu hình đúng chưa.
+### Terminal 1: Chạy Backend
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8080
+```
+### Terminal 2: Chạy Frontend
+```bash
+cd frontend
+streamlit run dashboard.py
+```
