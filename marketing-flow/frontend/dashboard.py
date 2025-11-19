@@ -83,7 +83,7 @@ def handle_tick(row_gspread, col_gspread, key, column_name, video_title):
                 st.toast("Đang kích hoạt Webhook...")
                 try:
                     # LƯU Ý: ĐÂY LÀ WEBHOOK CỦA BẠN, GIỮ NGUYÊN
-                    WEBHOOK_URL = "https://partible-terese-homocercal.ngrok-free.dev/webhook/e59036d3-dd92-45b6-9b14-cc2e4db45b05"
+                    WEBHOOK_URL = "https://diplex-arletta-supervoluminously.ngrok-free.dev/webhook/e59036d3-dd92-45b6-9b14-cc2e4db45b05"
                     webhook_payload = {
                         "row_index": row_gspread,
                         "title": video_title,
@@ -311,7 +311,7 @@ if active_tab_key == "1. Phân tích Video Tiktok":
                             "language": language,
                             "keyword": tt_keyword,
                             "target_sheet": "Source Phân tích Video",
-                            "n8n_webhook_url": "https://partible-terese-homocercal.ngrok-free.dev/webhook/a7b4c66d-f180-4439-a36d-96bce1e27bd0"
+                            "n8n_webhook_url": "https://diplex-arletta-supervoluminously.ngrok-free.dev/webhook/8b65e92c-33df-49a6-8949-6fd5cc524a2d"
                         }
                         res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
@@ -403,7 +403,7 @@ elif active_tab_key == "2. Chỉnh sửa Video":
                             "language": language,
                             "keyword": tt_keyword,
                             "target_sheet": "Source Chỉnh sửa Video",
-                            "n8n_webhook_url": "https://partible-terese-homocercal.ngrok-free.dev/webhook/ac438374-32a4-4f72-9043-a9971d21fe8c"
+                            "n8n_webhook_url": "https://diplex-arletta-supervoluminously.ngrok-free.dev/webhook/ac438374-32a4-4f72-9043-a9971d21fe8c"
                         }
                         res = requests.post(f"{API_URL}/video/viral-analyze", params=params, timeout=300)
                         
@@ -843,7 +843,7 @@ elif active_tab_key == "4. Báo cáo Hiệu suất":
             if st.button("Lấy dữ liệu mới", key="refresh_tab_5_n8n_button", use_container_width=True):
                 with st.spinner("Đang thu thập dữ liệu mới..."):
                     try:
-                        N8N_REPORT_WEBHOOK = "https://partible-terese-homocercal.ngrok-free.dev/webhook/b6f588e5-46c5-4e2d-9375-f80971ad4d84"
+                        N8N_REPORT_WEBHOOK = "https://diplex-arletta-supervoluminously.ngrok-free.dev/webhook/b6f588e5-46c5-4e2d-9375-f80971ad4d84"
                         
                         # Dùng timeout ngắn (fire-and-forget)
                         res = requests.post(N8N_REPORT_WEBHOOK, json={"event": "report_refresh_requested"}, timeout=5)
