@@ -73,7 +73,7 @@ Dashboard được chia thành 4 công cụ (tabs) chính:
 
 ### Hướng dẫn tải ffmpeg
 
-Cài đặt FFmpeg (Bắt buộc cho video):
+* Cài đặt FFmpeg (Bắt buộc cho video):
 Hệ thống này yêu cầu ffmpeg và ffprobe để xử lý mọi tác vụ video (tạo phụ đề, lật video, trộn âm thanh).
 
 Truy cập ffmpeg.org/download.html và tải về bản build cho Windows (thường được khuyên dùng là từ gyan.dev).
