@@ -71,6 +71,19 @@ Dashboard được chia thành 4 công cụ (tabs) chính:
 * Tài khoản Dropbox (với Access Token).
 * Một hệ thống n8n đang chạy (để nhận webhook).
 
+### Hướng dẫn tải ffmpeg
+
+Cài đặt FFmpeg (Bắt buộc cho video):
+Hệ thống này yêu cầu ffmpeg và ffprobe để xử lý mọi tác vụ video (tạo phụ đề, lật video, trộn âm thanh).
+
+Truy cập ffmpeg.org/download.html và tải về bản build cho Windows (thường được khuyên dùng là từ gyan.dev).
+
+Tải bản "essentials" build (ví dụ: ffmpeg-7.0.1-essentials_build.zip).
+
+Giải nén file zip vào một thư mục cố định (ví dụ: E:\tools\ffmpeg\).
+
+Đường dẫn bạn cần sẽ trỏ vào thư mục bin bên trong, ví dụ: E:\tools\ffmpeg\bin\ffmpeg.exe và E:\tools\ffmpeg\bin\ffprobe.exe.
+
 ### 1. Backend (FastAPI)
 
 1.  Di chuyển vào thư mục `backend`:
