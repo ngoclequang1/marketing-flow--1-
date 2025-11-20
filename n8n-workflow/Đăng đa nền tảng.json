@@ -1,0 +1,1211 @@
+{
+  "name": "Đa nền tảng",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Instagram\n",
+        "height": 232,
+        "width": 2244
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2944,
+        624
+      ],
+      "id": "b98993e6-0b9a-486a-9f71-d0da74df48a4",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v19.0/me/accounts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAA6d26wlHRkBPzMvQzZCw9nqLnTzPonlrtUWZCnMpHrAKziOTuTxQ0oLXQHXgpCdfjZCI5OBK1nR062ZArf2YL26AwxKcZAVZCuNh5rjAFR2VFAEbZCZAqL2ZBPqWwBnRkBc9wiNkOUKXxwPOrXV6VJHXbebHLqLnV3p15SrAaku5JEzXJzAxDa0QkJzanhmQ10Pf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2272,
+        656
+      ],
+      "id": "90279786-3331-4083-9e6f-d462ff53f832",
+      "name": "HTTP Request9"
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "videos",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "title",
+                "value": "={{ $json['Title (Nội dung chính)'] }}"
+              },
+              {
+                "name": "description",
+                "value": "={{ $json['Caption FB'] }}"
+              },
+              {
+                "name": "file_url",
+                "value": "={{ $json['Dropbox link'] }}"
+              },
+              {
+                "name": "published",
+                "value": "true"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        -2272,
+        976
+      ],
+      "id": "be4e8f64-2960-4d88-a88e-69efec62ef82",
+      "name": "Facebook Graph API4",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Fh720xdUFHldqVJB",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b7416ef-6cfa-468e-bbe8-3e8178334806",
+              "name": "facebookLink",
+              "value": "=https://www.facebook.com/101184119614525/posts/{{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "bf135f07-4b22-4ef9-b5e3-adec2c128b55",
+              "name": "Title (Nội dung chính)",
+              "value": "={{ $('If2').item.json['Link video gốc'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2064,
+        976
+      ],
+      "id": "b89f4703-f6e8-4eb6-86b8-66132678bda8",
+      "name": "Link Facebook1"
+    },
+    {
+      "parameters": {
+        "content": "## Facebook\n\n",
+        "height": 256,
+        "width": 1040,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2944,
+        928
+      ],
+      "id": "caf90702-97b0-4b4c-b35c-5f80938283b7",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ce4b588-b42b-44b3-866f-07536d6a92ae",
+              "name": "idIG",
+              "value": "={{ $json.instagram_business_account.id }}",
+              "type": "string"
+            },
+            {
+              "id": "5466930f-695d-4dc9-9895-a3741e98af85",
+              "name": "Title ",
+              "value": "={{ $('Lấy thông tin Instagram').item.json['Title '] }}",
+              "type": "string"
+            },
+            {
+              "id": "f50377c5-7bb7-41d5-ae2e-a9412628e88a",
+              "name": "caption",
+              "value": "={{ $('Lấy thông tin Instagram').item.json['Caption Insta'] }}",
+              "type": "string"
+            },
+            {
+              "id": "2a6d28ae-dbbf-4d08-96c9-23eb8f096dad",
+              "name": "Dropbox link",
+              "value": "={{ $('Lấy thông tin Instagram').item.json['Dropbox link'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1808,
+        656
+      ],
+      "id": "04e049e4-c891-4440-a0a8-fc29d3719de9",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{ $json.data[0].id }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "instagram_business_account"
+            },
+            {
+              "name": "access_token",
+              "value": "EAA6d26wlHRkBP3a1uF2gsZCpubH0TZBW9VBGSSZApUtRnToskoKWCs40wSqYn2kRZBxh92rU6xgsIxGqxTzlY5zWnCTewTZCwopzka3lRiODUQyZBHSCawHkq9uEZArXKHZAZBUXeD98GFje6CzabbCL5nQwZBzNP3ZBO7zvAhcSC6kW9reQYwGXj7mO4zOhAZAB"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2048,
+        656
+      ],
+      "id": "4293aebc-34c4-4291-9281-ebe67b5fdb21",
+      "name": "Lấy ID instagram3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ba27ee2b-75a3-4b19-a20e-2a0c53891222",
+              "name": "Title (Nội dung chính)",
+              "value": "={{ $json.Title }}",
+              "type": "string"
+            },
+            {
+              "id": "74ab1f15-bcbf-46fb-b2c8-c6c91f3545c1",
+              "name": "Caption FB",
+              "value": "={{ $json['Caption Facebook'] }}",
+              "type": "string"
+            },
+            {
+              "id": "125315c9-3969-440e-b139-215cfa9df002",
+              "name": "Dropbox link",
+              "value": "={{ $json['Remix Video Link'].replace('dl=0', 'dl=1') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2464,
+        976
+      ],
+      "id": "4d9d01dc-e652-432d-a4ac-6061794f1934",
+      "name": "Lấy thông tin Facebook6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ba27ee2b-75a3-4b19-a20e-2a0c53891222",
+              "name": "Title ",
+              "value": "={{ $json.Title }}",
+              "type": "string"
+            },
+            {
+              "id": "74ab1f15-bcbf-46fb-b2c8-c6c91f3545c1",
+              "name": "Caption Insta",
+              "value": "={{ $json['Caption Instagram'] }}",
+              "type": "string"
+            },
+            {
+              "id": "74aeeb3b-4bcb-4db2-a887-aac914ed7160",
+              "name": "Dropbox link",
+              "value": "={{ $json['Remix Video Link'].replace('dl=0', 'dl=1') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2480,
+        656
+      ],
+      "id": "c67681c7-4dda-40a4-a926-cf951c937299",
+      "name": "Lấy thông tin Instagram"
+    },
+    {
+      "parameters": {
+        "amount": 1.5,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1312,
+        656
+      ],
+      "id": "f8a8e56b-3a89-4f53-8b19-597207e136b7",
+      "name": "Wait2",
+      "webhookId": "39951c05-17d0-4db4-a08e-77542953cde6"
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "={{ $('Edit Fields1').item.json.idIG }}",
+        "edge": "media",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "caption",
+                "value": "={{ $('Edit Fields1').item.json.caption }}"
+              },
+              {
+                "name": "media_type",
+                "value": "REELS"
+              },
+              {
+                "name": "video_url",
+                "value": "={{ $json['Dropbox link'] }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        -1568,
+        656
+      ],
+      "id": "29ecf282-84a8-4588-9859-d6d8340c4289",
+      "name": "Đăng media Insta",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "evNkUxbp1iG1cRZE",
+          "name": "Instagram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "={{ $('Edit Fields1').item.json.idIG }}",
+        "edge": "media_publish",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "creation_id",
+                "value": "={{ $json.id }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        656
+      ],
+      "id": "6012e8d2-681f-4c2c-8455-a8de3a2a6a57",
+      "name": "Publish bài đăng4",
+      "retryOnFail": true,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "evNkUxbp1iG1cRZE",
+          "name": "Instagram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "graphApiVersion": "v23.0",
+        "node": "={{ $json.id }}",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "fields",
+                "value": "=permalink"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        656
+      ],
+      "id": "dc45a622-a567-49ce-81b0-0d6d6839af04",
+      "name": "Lấy link",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "evNkUxbp1iG1cRZE",
+          "name": "Instagram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bcab233c-de7a-4845-a4d1-a5520fcb554b",
+              "leftValue": "={{ $json.Facebook }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a6d48b19-f0b3-42f4-9517-66e8bdaef993",
+              "leftValue": "={{ $json.IG }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3552,
+        896
+      ],
+      "id": "d5499d1d-a726-4bc9-9e46-194849cd62f7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.IG }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d1a3b759-6da9-4a9b-a854-0a5f5934bfa6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "IG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3f0ada63-ed47-474a-aca8-50eb86de80ca",
+                    "leftValue": "={{ $json.Facebook }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FB"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -3296,
+        880
+      ],
+      "id": "f5fd1a0f-f52e-490c-9fcc-637cef3d7ed6",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "224c0e83-f392-4537-9edc-a05c6abb4654",
+              "name": "link IG",
+              "value": "={{ $json.permalink }}",
+              "type": "string"
+            },
+            {
+              "id": "72eb78ac-431a-447c-a244-b6d7d2dd1536",
+              "name": "facebookLink",
+              "value": "={{ $json.facebookLink }}",
+              "type": "string"
+            },
+            {
+              "id": "81f9e131-5402-4380-9113-02d73c9c1680",
+              "name": "url",
+              "value": "={{ $json['Title (Nội dung chính)'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -320,
+        960
+      ],
+      "id": "64ceb188-04f0-43dc-a770-7a1bdc55f43a",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -560,
+        960
+      ],
+      "id": "ce61b84d-498d-47c3-ab79-891ae65fc033",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "e59036d3-dd92-45b6-9b14-cc2e4db45b05",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -4160,
+        896
+      ],
+      "id": "04b5c369-e795-45fc-999c-482a2f1e0e5d",
+      "name": "Webhook",
+      "webhookId": "e59036d3-dd92-45b6-9b14-cc2e4db45b05"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1740666223,
+          "mode": "list",
+          "cachedResultName": "MVP_Content_Plan",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1740666223"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Ready",
+              "lookupValue": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3952,
+        896
+      ],
+      "id": "c90a5400-d4eb-407a-acc5-6efb47730fe8",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cede2f3f-43ba-4ddc-b02f-521180b8031e",
+              "name": "Facebook",
+              "value": "={{ $json.Facebook }}",
+              "type": "string"
+            },
+            {
+              "id": "05cc264c-8e89-45c9-9d40-ef46bc79db98",
+              "name": "IG",
+              "value": "={{ $json.IG }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3744,
+        896
+      ],
+      "id": "5f5032dc-2126-4720-8878-93d3df9d4cd8",
+      "name": "Lấy nền tảng"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1615217332,
+          "mode": "list",
+          "cachedResultName": "Source Chỉnh sửa Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1615217332"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2928,
+        704
+      ],
+      "id": "a5cb221c-89fe-4070-b099-c2d492259b4f",
+      "name": "Lấy link video",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1615217332,
+          "mode": "list",
+          "cachedResultName": "Source Chỉnh sửa Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1615217332"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2928,
+        1024
+      ],
+      "id": "8e003066-ba5c-418d-be01-20385b00a7a7",
+      "name": "Lấy link video1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1740666223,
+          "mode": "list",
+          "cachedResultName": "MVP_Content_Plan",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1740666223"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Ready": "false",
+            "Link Facebook": "={{ $json.facebookLink }}",
+            "Link Instagram": "={{ $json['link IG'] }}",
+            "Link Video Gốc": "={{ $json.url }}"
+          },
+          "matchingColumns": [
+            "Link Video Gốc"
+          ],
+          "schema": [
+            {
+              "id": "Keyword",
+              "displayName": "Keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link Video Gốc",
+              "displayName": "Link Video Gốc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook",
+              "displayName": "Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "IG",
+              "displayName": "IG",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Ready",
+              "displayName": "Ready",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link Facebook",
+              "displayName": "Link Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Link Instagram",
+              "displayName": "Link Instagram",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -80,
+        960
+      ],
+      "id": "e7173d0a-de40-4605-968f-3c67f246a43f",
+      "name": "Update MVP",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c32159d9-cc39-4d2d-b5c3-08c551591904",
+              "leftValue": "={{ $json.keyword }}",
+              "rightValue": "={{ $('Get row(s) in sheet').item.json.Keyword }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2768,
+        704
+      ],
+      "id": "92b4a1d9-210c-49d0-9497-0a359f2e0266",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f445e679-0ec4-41a8-af17-bdd53a3e35e0",
+              "leftValue": "={{ $json.keyword }}",
+              "rightValue": "={{ $('Get row(s) in sheet').item.json.Keyword }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2768,
+        1024
+      ],
+      "id": "6973d3f6-6e27-4267-b312-be0e747cb46b",
+      "name": "If2"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "partible-terese-homocercal.ngrok-free.dev",
+            "user-agent": "python-requests/2.32.3",
+            "content-length": "102",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate",
+            "content-type": "application/json",
+            "x-forwarded-for": "2405:4802:1cd9:3190:3d77:a8b1:9e6e:466a",
+            "x-forwarded-host": "partible-terese-homocercal.ngrok-free.dev",
+            "x-forwarded-proto": "https"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "row_index": 10,
+            "title": "hướng dẫn làm video",
+            "event": "ready_for_processing"
+          },
+          "webhookUrl": "https://partible-terese-homocercal.ngrok-free.dev/webhook/e59036d3-dd92-45b6-9b14-cc2e4db45b05",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "HTTP Request9": {
+      "main": [
+        [
+          {
+            "node": "Lấy ID instagram3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API4": {
+      "main": [
+        [
+          {
+            "node": "Link Facebook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link Facebook1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Đăng media Insta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy ID instagram3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy thông tin Facebook6": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy thông tin Instagram": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Publish bài đăng4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đăng media Insta": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish bài đăng4": {
+      "main": [
+        [
+          {
+            "node": "Lấy link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy link": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Lấy link video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lấy link video1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Update MVP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Lấy nền tảng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy nền tảng": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy link video": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy link video1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Lấy thông tin Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Lấy thông tin Facebook6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e8ee844e-1b42-4e7b-8187-4436052f1fde",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a5687956cb943cbcc3e67d5d6cee59a837afe62cbf4045df2f8ef234d6001617"
+  },
+  "id": "qgwP2aRQmbAatWhO",
+  "tags": [
+    {
+      "createdAt": "2025-11-13T08:16:57.768Z",
+      "updatedAt": "2025-11-13T08:16:57.768Z",
+      "id": "LGHlqwwzmwwMTNRA",
+      "name": "Threads"
+    },
+    {
+      "createdAt": "2025-11-13T08:16:57.724Z",
+      "updatedAt": "2025-11-13T08:16:57.724Z",
+      "id": "aR5t3iFYFMTmOjxC",
+      "name": "Done"
+    }
+  ]
+}

@@ -1,0 +1,761 @@
+{
+  "name": "Chỉnh sửa Video",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1615217332,
+          "mode": "list",
+          "cachedResultName": "Source Chỉnh sửa Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1615217332"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -304,
+        -208
+      ],
+      "id": "5b51fe2a-040f-48ee-bf0e-26ea1be4991e",
+      "name": "Lấy subtitle",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed3b1ec3-e976-4dbf-b3db-98c06e8ae6b3",
+              "name": "subtitle",
+              "value": "={{ $json.fullText }}",
+              "type": "string"
+            },
+            {
+              "id": "86aab8b8-e6c6-467c-a538-880d26308fb9",
+              "name": "keyword",
+              "value": "={{ $json.keyword }}",
+              "type": "string"
+            },
+            {
+              "id": "0578c4ce-bfed-40dd-814b-931d7d7b2f07",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        -80
+      ],
+      "id": "3fa794fb-9c3d-492d-90ea-2f34a1ccf5c2",
+      "name": "Lọc dữ liệu"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a5bedcfb-0810-447d-a308-008ece785a42",
+              "name": "output",
+              "value": "={{ $json.content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        -80
+      ],
+      "id": "63a68d39-97c6-45ac-a6b5-c234071514c9",
+      "name": "Lấy output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- BẮT ĐẦU CODE CHÍNH ---\n\ntry {\n  // 1. Lấy và phân tích chuỗi JSON\n  const jsonString = $input.first().json.output;\n  const parsedData = JSON.parse(jsonString);\n\n  // 2. (Đã xóa toàn bộ code xử lý 'marketing_analysis')\n\n  // 3. Trả về kết quả chỉ chứa title và caption\n  return {\n    // Lấy 'video_title' trực tiếp từ 'parsedData'\n    video_title: parsedData.video_title || \"\", \n    \n    // (Đã xóa 'marketing_analysis')\n    \n    // Lấy captions\n    facebook_caption: parsedData.captions?.facebook || \"\",\n    instagram_caption: parsedData.captions?.instagram || \"\"\n  };\n\n} catch (error) {\n  // Khối catch này vẫn đúng\n  return { \n    error: \"Lỗi xử lý: \" + error.message, \n    original_data: $input.first().json.output \n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        -80
+      ],
+      "id": "ca9e2b02-e4e0-41ad-a128-5655bfef427d",
+      "name": "Chuẩn hóa dữ liệu"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0fc63e31-4193-479c-9b7a-db9c619df25c",
+              "leftValue": "={{ $json['check box'].toString() }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -128,
+        -208
+      ],
+      "id": "f3a236b4-0ca0-475f-8a5b-213aa17969bc",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy toàn bộ item đầu vào\nconst input = $input.first().json;\n\n// 1. Lấy keyword\nconst keyword = input.keyword;\n\n// 2. Lấy url (THÊM MỚI)\n// Phải dùng dấu ngoặc vuông vì tên cột \"Link video gốc\" có dấu cách\nconst url = input[\"Link video gốc\"];\n\n// 3. Lấy fullText (Code cũ của bạn)\nlet fullText = \"\";\nlet raw = input[\"subtitle video\"];\n\n// Kiểm tra xem 'subtitle video' có tồn tại và không rỗng không\nif (raw) {\n  try {\n    // Loại bỏ dấu phẩy thừa trước dấu }\n    raw = raw.replace(/,\\s*}/g, \"}\");\n    \n    const data = JSON.parse(raw);\n\n    // Lấy danh sách segment\n    const segments = data.all_segments || [];\n\n    // Lấy toàn bộ text\n    const texts = segments.map(seg => seg.text);\n\n    // Ghép lại thành text\n    fullText = texts.join(\" \");\n\n  } catch (error) {\n    // Nếu JSON bị lỗi, gán 'fullText' là thông báo lỗi\n    fullText = \"Lỗi phân tích JSON: \" + error.message;\n  }\n} else {\n  // Nếu 'subtitle video' rỗng, gán 'fullText' là chuỗi rỗng\n  fullText = \"\";\n}\n\n// 4. Trả về cả ba (fullText, keyword, và url)\nreturn [{ \n  json: { \n    fullText: fullText,\n    keyword: keyword,\n    url: url // (THÊM MỚI)\n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -80
+      ],
+      "id": "ead40d0b-c163-4877-9ac2-8a6b76d1bf90",
+      "name": "Lọc subtitle"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.0-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Đầu vào: Tôi sẽ cung cấp cho bạn một đoạn văn bản dưới đây.\n\n{{ $json.subtitle }}"
+            },
+            {
+              "content": "=Bạn là chuyên gia về chiến lược nội dung và social media marketing. Dựa trên đoạn transcription của video, hãy tạo tiêu đề và caption tối ưu để đăng mạng xã hội.\n\n▶ YÊU CẦU BẮT BUỘC\n\nHãy xuất kết quả dưới dạng JSON, và luôn giữ đúng cấu trúc sau:\n\n{\n  \"video_title\": \"\",\n  \"captions\": {\n    \"facebook\": \"\",\n    \"instagram\": \"\"\n  }\n}\n\n▶ MÔ TẢ OUTPUT\n1. video_title\n\nMột tiêu đề ngắn gọn, hấp dẫn, đúng nội dung, mang tính câu kéo mạnh.\n\n2. captions\nfacebook\n\nGiọng kể chuyện, thân thiện, gần gũi.\n\nCó mục đích khuyến khích bình luận hoặc click xem.\n\nKhông cần hashtag trừ khi thực sự cần.\n\ninstagram\n\nDòng đầu tiên phải là hook cực mạnh.\n\nDùng emoji hợp lý.\n\nCuối caption phải có 5–7 hashtag chiến lược liên quan nội dung.\n\n▶ CHỈ DẪN QUAN TRỌNG\n\nOutput chỉ là JSON.\n\nKhông thêm mô tả, giải thích, markdown hay ký tự thừa.\n\nKhông thay đổi tên key JSON.\n\nKhông được thêm trường khác.",
+              "role": "model"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -80
+      ],
+      "id": "39fde9a2-1c7a-49a6-adc1-e95ebd570010",
+      "name": "Tạo Phân tích Video",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "IqddL1p8o4zaf999",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1740666223,
+          "mode": "list",
+          "cachedResultName": "MVP_Content_Plan",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1740666223"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Keyword": "={{ $('Lọc dữ liệu').item.json.keyword }}",
+            "Link Video Gốc": "={{ $('Lọc dữ liệu').item.json.url }}"
+          },
+          "matchingColumns": [
+            "Keyword"
+          ],
+          "schema": [
+            {
+              "id": "Keyword",
+              "displayName": "Keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Link Video Gốc",
+              "displayName": "Link Video Gốc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook",
+              "displayName": "Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "IG",
+              "displayName": "IG",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Ready",
+              "displayName": "Ready",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link Facebook",
+              "displayName": "Link Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link Instagram",
+              "displayName": "Link Instagram",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        -80
+      ],
+      "id": "7e1821ab-81d8-4304-83fa-d84847e751e0",
+      "name": "Update MVP",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1615217332,
+          "mode": "list",
+          "cachedResultName": "Source Chỉnh sửa Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1615217332"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "check box": "true",
+            "Title": "={{ $('Chuẩn hóa dữ liệu').item.json.video_title }}",
+            "Caption Facebook": "={{ $('Chuẩn hóa dữ liệu').item.json.facebook_caption }}",
+            "Caption Instagram": "={{ $('Chuẩn hóa dữ liệu').item.json.instagram_caption }}",
+            "Link video gốc": "={{ $json['Link Video Gốc'] }}"
+          },
+          "matchingColumns": [
+            "Link video gốc"
+          ],
+          "schema": [
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link video gốc",
+              "displayName": "Link video gốc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "subtitle video",
+              "displayName": "subtitle video",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "check box",
+              "displayName": "check box",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Remix Video Link",
+              "displayName": "Remix Video Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Caption Facebook",
+              "displayName": "Caption Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Caption Instagram",
+              "displayName": "Caption Instagram",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1456,
+        -80
+      ],
+      "id": "6e96fa01-ea6e-4bd3-a7db-587535a0d998",
+      "name": "Update Phân tích",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ac438374-32a4-4f72-9043-a9971d21fe8c",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -528,
+        -208
+      ],
+      "id": "b8913c8a-3b7d-4bfb-b46d-c0224683c1a7",
+      "name": "Webhook",
+      "webhookId": "ac438374-32a4-4f72-9043-a9971d21fe8c"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "partible-terese-homocercal.ngrok-free.dev",
+            "user-agent": "python-requests/2.32.5",
+            "content-length": "2757",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate",
+            "content-type": "application/json",
+            "x-forwarded-for": "2405:4802:1cd9:3190:3d77:a8b1:9e6e:466a",
+            "x-forwarded-host": "partible-terese-homocercal.ngrok-free.dev",
+            "x-forwarded-proto": "https"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "all_segments": [
+              {
+                "start_sec": 0,
+                "end_sec": 1.3,
+                "duration_sec": 1.3,
+                "text": "Chào mừng các bạn đến với thế",
+                "reason": ""
+              },
+              {
+                "start_sec": 1.3,
+                "end_sec": 3.28,
+                "duration_sec": 1.98,
+                "text": "kỷ 21, nơi mà người ta nói",
+                "reason": ""
+              },
+              {
+                "start_sec": 3.28,
+                "end_sec": 4.8,
+                "duration_sec": 1.52,
+                "text": "nhiều về tình dục hơn là tình",
+                "reason": ""
+              },
+              {
+                "start_sec": 4.8,
+                "end_sec": 5.16,
+                "duration_sec": 0.36,
+                "text": "yêu.",
+                "reason": ""
+              },
+              {
+                "start_sec": 5.36,
+                "end_sec": 6.58,
+                "duration_sec": 1.22,
+                "text": "Nơi đồng tiền được đánh giá",
+                "reason": ""
+              },
+              {
+                "start_sec": 6.58,
+                "end_sec": 7.98,
+                "duration_sec": 1.4,
+                "text": "cao hơn là sự tử tế.",
+                "reason": ""
+              },
+              {
+                "start_sec": 8.2,
+                "end_sec": 10.16,
+                "duration_sec": 1.96,
+                "text": "Nơi vẻ ngoài được đặt lên cao",
+                "reason": ""
+              },
+              {
+                "start_sec": 10.16,
+                "end_sec": 11.08,
+                "duration_sec": 0.92,
+                "text": "hơn cả sự chăm chỉ.",
+                "reason": ""
+              },
+              {
+                "start_sec": 11.38,
+                "end_sec": 12.72,
+                "duration_sec": 1.34,
+                "text": "Nơi người ta sẵn sàng cho sự",
+                "reason": ""
+              },
+              {
+                "start_sec": 12.72,
+                "end_sec": 13.3,
+                "duration_sec": 0.58,
+                "text": "chia ly.",
+                "reason": ""
+              },
+              {
+                "start_sec": 13.52,
+                "end_sec": 14.9,
+                "duration_sec": 1.38,
+                "text": "Nơi mà gia đình không phải là",
+                "reason": ""
+              },
+              {
+                "start_sec": 14.9,
+                "end_sec": 15.9,
+                "duration_sec": 1,
+                "text": "đích đến cuối cùng",
+                "reason": ""
+              },
+              {
+                "start_sec": 15.9,
+                "end_sec": 17.56,
+                "duration_sec": 1.66,
+                "text": "và là nơi sự thể hiện trên mạng",
+                "reason": ""
+              },
+              {
+                "start_sec": 17.56,
+                "end_sec": 18.86,
+                "duration_sec": 1.3,
+                "text": "quan trọng hơn những khốn khó",
+                "reason": ""
+              },
+              {
+                "start_sec": 18.86,
+                "end_sec": 19.4,
+                "duration_sec": 0.54,
+                "text": "ở ngoài đời.",
+                "reason": ""
+              },
+              {
+                "start_sec": 19.56,
+                "end_sec": 20.54,
+                "duration_sec": 0.98,
+                "text": "Bạn có thích cách sống như",
+                "reason": ""
+              },
+              {
+                "start_sec": 20.54,
+                "end_sec": 21.42,
+                "duration_sec": 0.88,
+                "text": "hiện tại hay không?",
+                "reason": ""
+              },
+              {
+                "start_sec": 21.72,
+                "end_sec": 23.18,
+                "duration_sec": 1.46,
+                "text": "Còn mình thì...",
+                "reason": ""
+              },
+              {
+                "start_sec": 23.18,
+                "end_sec": 23.46,
+                "duration_sec": 0.28,
+                "text": "Không.",
+                "reason": ""
+              }
+            ],
+            "stats": {
+              "all_segments": {
+                "count": 19,
+                "mean": 1.1610525846481323,
+                "median": 1.2999999523162842,
+                "p90": 1.7199996709823608,
+                "shortest": 0.2800000011920929,
+                "longest": 1.9800000190734863
+              }
+            }
+          },
+          "webhookUrl": "https://partible-terese-homocercal.ngrok-free.dev/webhook/ac438374-32a4-4f72-9043-a9971d21fe8c",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Lấy subtitle": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lọc dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Tạo Phân tích Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy output": {
+      "main": [
+        [
+          {
+            "node": "Chuẩn hóa dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chuẩn hóa dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Update MVP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lọc subtitle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lọc subtitle": {
+      "main": [
+        [
+          {
+            "node": "Lọc dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo Phân tích Video": {
+      "main": [
+        [
+          {
+            "node": "Lấy output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update MVP": {
+      "main": [
+        [
+          {
+            "node": "Update Phân tích",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lấy subtitle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cb23c031-0abb-4cc9-ae5f-8df8733e2855",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a5687956cb943cbcc3e67d5d6cee59a837afe62cbf4045df2f8ef234d6001617"
+  },
+  "id": "X7XZWk6N25JoH5BQ",
+  "tags": []
+}

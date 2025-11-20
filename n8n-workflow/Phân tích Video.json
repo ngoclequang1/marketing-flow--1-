@@ -1,0 +1,422 @@
+{
+  "name": "Phân tích Video",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 247030835,
+          "mode": "list",
+          "cachedResultName": "Source Phân tích Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=247030835"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -304,
+        -176
+      ],
+      "id": "7d5f1642-9690-46cb-a511-c53ddda82de0",
+      "name": "Lấy subtitle",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed3b1ec3-e976-4dbf-b3db-98c06e8ae6b3",
+              "name": "subtitle",
+              "value": "={{ $json.fullText }}",
+              "type": "string"
+            },
+            {
+              "id": "86aab8b8-e6c6-467c-a538-880d26308fb9",
+              "name": "keyword",
+              "value": "={{ $json.keyword }}",
+              "type": "string"
+            },
+            {
+              "id": "7c3d1060-053d-40f5-a01b-a5a7b11b278b",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        -80
+      ],
+      "id": "6388cb23-2850-4723-876f-64d8d7c56e29",
+      "name": "Lọc dữ liệu"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a5bedcfb-0810-447d-a308-008ece785a42",
+              "name": "output",
+              "value": "={{ $json.content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        -80
+      ],
+      "id": "25a1ffc7-b8b2-4d49-a45b-899b6c360515",
+      "name": "Lấy output"
+    },
+    {
+      "parameters": {
+        "jsCode": "function formatObject(obj) {\n  let text = \"\";\n  if (!obj) return \"\"; // Trả về chuỗi rỗng nếu obj không tồn tại\n\n  for (const [key, value] of Object.entries(obj)) {\n    // Viết hoa chữ cái đầu tiên của 'key' (vd: 'hook' -> 'Hook')\n    const formattedKey = key.charAt(0).toUpperCase() + key.slice(1);\n    text += `• ${formattedKey}: ${value}\\n`; // Thêm dấu • và xuống dòng\n  }\n  return text.trim(); // Xóa dòng trống cuối cùng\n}\n\n// --- BẮT ĐẦU CODE CHÍNH ---\n\ntry {\n  // 1. Lấy và phân tích chuỗi JSON\n  const jsonString = $input.first().json.output;\n  const parsedData = JSON.parse(jsonString);\n\n  // Lấy 'marketing_analysis' từ 'parsedData'\n  const analysis = parsedData.marketing_analysis;\n  let analysisSummary = \"\";\n\n  // 2. TỰ ĐỘNG KIỂM TRA CẤU TRÚC (Phần này giữ nguyên, vì nó an toàn)\n  if (analysis?.strengths || analysis?.weaknesses) {\n    // --- Xử lý cấu trúc lồng (phức tạp) ---\n    if (analysis.strengths) {\n      analysisSummary += \"✅ ĐIỂM MẠNH:\\n\";\n      analysisSummary += formatObject(analysis.strengths) + \"\\n\\n\";\n    }\n    if (analysis.weaknesses) {\n      analysisSummary += \"❌ ĐIỂM YẾU:\\n\";\n      analysisSummary += formatObject(analysis.weaknesses) + \"\\n\\n\";\n    }\n    if (analysis.improvement_suggestions) {\n      analysisSummary += \"💡 GỢI Ý CẢI THIỆN:\\n\";\n      analysisSummary += formatObject(analysis.improvement_suggestions);\n    }\n  } else if (analysis) { \n    analysisSummary = formatObject(analysis);\n  } else {\n    analysisSummary = \"Không có phân tích marketing.\";\n  }\n  return {\n    marketing_analysis: analysisSummary.trim()\n  };\n\n} catch (error) {\n  return { \n    error: \"Lỗi xử lý: \" + error.message, \n    original_data: $input.first().json.output \n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        -80
+      ],
+      "id": "5fa4a727-47a0-468b-9807-dbc9cfd11b3d",
+      "name": "Chuẩn hóa dữ liệu"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0fc63e31-4193-479c-9b7a-db9c619df25c",
+              "leftValue": "={{ $json['check box'].toString() }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -96,
+        -176
+      ],
+      "id": "cb33f8c9-af5d-4a74-b286-8e595b3927b5",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy toàn bộ item đầu vào\nconst input = $input.first().json;\n\n// 1. Lấy keyword\nconst keyword = input.keyword;\n\n// 2. Lấy url (THÊM MỚI)\n// Phải dùng dấu ngoặc vuông vì tên cột \"Link video gốc\" có dấu cách\nconst url = $input.first().json['Link Video gốc'];\n\n// 3. Lấy fullText (Code cũ của bạn)\nlet fullText = \"\";\nlet raw = input[\"subtitle video\"];\n\n// Kiểm tra xem 'subtitle video' có tồn tại và không rỗng không\nif (raw) {\n  try {\n    // Loại bỏ dấu phẩy thừa trước dấu }\n    raw = raw.replace(/,\\s*}/g, \"}\");\n    \n    const data = JSON.parse(raw);\n\n    // Lấy danh sách segment\n    const segments = data.all_segments || [];\n\n    // Lấy toàn bộ text\n    const texts = segments.map(seg => seg.text);\n\n    // Ghép lại thành text\n    fullText = texts.join(\" \");\n\n  } catch (error) {\n    // Nếu JSON bị lỗi, gán 'fullText' là thông báo lỗi\n    fullText = \"Lỗi phân tích JSON: \" + error.message;\n  }\n} else {\n  // Nếu 'subtitle video' rỗng, gán 'fullText' là chuỗi rỗng\n  fullText = \"\";\n}\n\n// 4. Trả về cả ba (fullText, keyword, và url)\nreturn [{ \n  json: { \n    fullText: fullText,\n    keyword: keyword,\n    url: url \n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -80
+      ],
+      "id": "782c1f81-0af8-4f8e-87e6-0cfb11c364c0",
+      "name": "Lọc subtitle"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.0-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Đầu vào: Tôi sẽ cung cấp cho bạn một đoạn văn bản dưới đây.\n\n{{ $json.subtitle }}"
+            },
+            {
+              "content": "=Bối cảnh:\nBạn là chuyên gia chiến lược nội dung và social media marketing. Hãy phân tích đoạn transcription của video và tạo ra phần marketing_analysis theo đúng cấu trúc JSON được quy định dưới đây.\n\n▶ YÊU CẦU BẮT BUỘC\n\nHãy xuất ra JSON duy nhất, luôn theo đúng mẫu sau, không thêm hoặc bớt key:\n\n{\n  \"marketing_analysis\": {\n    \"strengths\": {\n      \"hook\": \"\",\n      \"value\": \"\",\n      \"cta\": \"\",\n      \"emotion_connection\": \"\"\n    },\n    \"weaknesses\": {\n      \"clarity\": \"\",\n      \"structure\": \"\",\n      \"engagement\": \"\"\n    },\n    \"improvement_suggestions\": {\n      \"clarity\": \"\",\n      \"structure\": \"\",\n      \"engagement\": \"\"\n    }\n  }\n}\n\n▶ MÔ TẢ CÁC PHẦN\nmarketing_analysis\n1. strengths\n\nhook → Phân tích mức độ thu hút của 1–2 câu mở đầu.\n\nvalue → Nội dung mang lại giá trị gì?\n\ncta → Có lời kêu gọi hành động không, hiệu quả không?\n\nemotion_connection → Mức độ cảm xúc, storytelling, kết nối.\n\n2. weaknesses\n\nclarity → Có đoạn nào khó hiểu, dư thừa, lan man?\n\nstructure → Mạch nội dung có hợp lý không? thiếu mở/kết?\n\nengagement → Những phần dễ làm người xem rời đi.\n\n3. improvement_suggestions\n\nĐưa ra giải pháp cụ thể tương ứng 1–1 với 3 điểm yếu ở trên:\n\ncải thiện độ rõ ràng\n\ncải thiện cấu trúc\n\ntăng engagement\n\n▶ QUY TẮC BẮT BUỘC\n\nOutput chỉ được chứa JSON, không giải thích thêm.\n\nKhông được đổi tên key JSON.\n\nKhông được thêm markdown, emoji, ghi chú.\n\nKhông được thêm dữ liệu ngoài form mẫu.",
+              "role": "model"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -80
+      ],
+      "id": "3768086f-1efb-4dc7-acad-47d79de93293",
+      "name": "Tạo Phân tích Video",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "IqddL1p8o4zaf999",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 247030835,
+          "mode": "list",
+          "cachedResultName": "Source Phân tích Video",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=247030835"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "check box": "true",
+            "Link Video gốc": "={{ $('Lọc dữ liệu').item.json.url }}",
+            "Phân tích video": "={{ $json.marketing_analysis }}"
+          },
+          "matchingColumns": [
+            "Link Video gốc"
+          ],
+          "schema": [
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link Video gốc",
+              "displayName": "Link Video gốc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "subtitle video",
+              "displayName": "subtitle video",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "check box",
+              "displayName": "check box",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phân tích video",
+              "displayName": "Phân tích video",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        -80
+      ],
+      "id": "bc90a9cf-5deb-4685-b542-df3afb50e4bb",
+      "name": "Update Phân tích",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "8b65e92c-33df-49a6-8949-6fd5cc524a2d",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -528,
+        -176
+      ],
+      "id": "50b16a44-62a8-4a02-9b32-60b7d6069e74",
+      "name": "Webhook",
+      "webhookId": "8b65e92c-33df-49a6-8949-6fd5cc524a2d"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lấy subtitle": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lọc dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Tạo Phân tích Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy output": {
+      "main": [
+        [
+          {
+            "node": "Chuẩn hóa dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chuẩn hóa dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Update Phân tích",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lọc subtitle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lọc subtitle": {
+      "main": [
+        [
+          {
+            "node": "Lọc dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo Phân tích Video": {
+      "main": [
+        [
+          {
+            "node": "Lấy output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lấy subtitle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "50bf5217-c5e5-4571-ab42-a79baf25e6a3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a5687956cb943cbcc3e67d5d6cee59a837afe62cbf4045df2f8ef234d6001617"
+  },
+  "id": "j9JfJerJhHxMijrl",
+  "tags": []
+}

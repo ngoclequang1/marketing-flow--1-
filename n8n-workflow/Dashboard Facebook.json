@@ -1,0 +1,498 @@
+{
+  "name": "Dashboard Facebook",
+  "nodes": [
+    {
+      "parameters": {
+        "graphApiVersion": "v23.0",
+        "node": "={{ $json.attachments.data[0].target.id }}",
+        "edge": "video_insights",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        688,
+        304
+      ],
+      "id": "b37cca21-6923-4e56-b3f9-e6361efa8363",
+      "name": "Facebook Graph API1",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Fh720xdUFHldqVJB",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "posts",
+        "options": {
+          "fields": {
+            "field": [
+              {
+                "name": "attachments"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        240
+      ],
+      "id": "5398e939-5b9d-471c-a625-654fc017b8cf",
+      "name": "Lấy post",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Fh720xdUFHldqVJB",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "id": "22f8dac2-e4f9-4cf9-a873-cf6c4f36aefa",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        208,
+        240
+      ],
+      "id": "e54f808f-b332-42a7-aa12-284c577b415a",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3dda58ae-e4be-4dbb-89cc-75b0a677f626",
+              "leftValue": "={{ $json.attachments.data[0].type }}",
+              "rightValue": "video_inline",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        416,
+        336
+      ],
+      "id": "584222eb-ec0a-43f4-af71-5a13df2ae3e9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy input JSON từ node trước\nconst videoInsights = $input.first().json.data; // mảng metric\n\n// Tham số đầu vào: độ dài video (giây)\nconst videoLengthSec = $json.videoLengthSec || 10; // ví dụ default 10 giây nếu không truyền\n\n// Helper function lấy giá trị metric theo name\nfunction getMetric(name) {\n  const metric = videoInsights.find(item => item.name === name);\n  if (!metric || !metric.values[0]) return null;\n  return metric.values[0].value;\n}\n\n// Parse retentionGraph thành mảng theo thứ tự 0..n\nfunction parseRetentionGraph(graphObj) {\n  if (!graphObj) return [];\n  return Object.keys(graphObj)\n    .sort((a, b) => Number(a) - Number(b))\n    .map(key => graphObj[key]);\n}\n\n// Lấy dữ liệu cơ bản\nconst totalViews = getMetric('fb_reels_total_plays') || 0;\nconst avgWatchTimeSec = (getMetric('post_video_avg_time_watched') || 0) / 1000;\nconst totalViewTimeSec = (getMetric('post_video_view_time') || 0) / 1000;\nconst impressionsUnique = getMetric('post_impressions_unique') || 0;\nconst replayCount = getMetric('fb_reels_replay_count') || 0;\nconst socialActions = getMetric('post_video_social_actions') || {};\nconst followersGained = getMetric('post_video_followers') || 0;\nconst retentionGraph = parseRetentionGraph(getMetric('post_video_retention_graph'));\n\n// Tính engagement (likes + comments + shares)\nconst totalLikes = socialActions.like || 0;\nconst totalComments = socialActions.comment || 0;\nconst totalShares = socialActions.share || 0;\nconst totalEngagements = totalLikes + totalComments + totalShares;\nconst engagementRate = impressionsUnique > 0 ? (totalEngagements / impressionsUnique) : 0;\n\n// Tính tỷ lệ xem trung bình / độ dài video\nconst avgWatchRatio = videoLengthSec > 0 ? (avgWatchTimeSec / videoLengthSec) : 0;\n\n// Dashboard nâng cao\nconst dashboard = {\n  totalViews,\n  avgWatchTimeSec: avgWatchTimeSec.toFixed(2),\n  totalViewTimeSec: totalViewTimeSec.toFixed(2),\n  impressionsUnique,\n  replayCount,\n  socialActions,\n  followersGained,\n  retentionGraph,\n  totalEngagements,\n  engagementRate: engagementRate.toFixed(3), // ví dụ 0.123 ~ 12.3%\n  avgWatchRatio: avgWatchRatio.toFixed(3)     // ví dụ 0.301 ~ 30.1%\n};\n\nreturn [{ json: dashboard }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        304
+      ],
+      "id": "d3e95cb0-f9e9-4e1a-8f67-efa659b413ba",
+      "name": "Lấy dữ liệu"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b6f588e5-46c5-4e2d-9375-f80971ad4d84",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        240
+      ],
+      "id": "ee89471f-b0fa-407b-adcb-81575ce338e2",
+      "name": "Webhook",
+      "webhookId": "b6f588e5-46c5-4e2d-9375-f80971ad4d84"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7dad6393-744e-4122-8f02-cb885592e603",
+              "name": "totalViews",
+              "value": "={{ $json.totalViews }}",
+              "type": "number"
+            },
+            {
+              "id": "5a704296-0ba5-403f-96d0-6044e014d5c3",
+              "name": "avgWatchTimeSec",
+              "value": "={{ $json.avgWatchTimeSec }}",
+              "type": "string"
+            },
+            {
+              "id": "14a47010-dd94-44a6-8387-9240f0a852f4",
+              "name": "totalViewTimeSec",
+              "value": "={{ $json.totalViewTimeSec }}",
+              "type": "string"
+            },
+            {
+              "id": "4d96f4a1-55cb-4dd9-90c3-08fda98c923a",
+              "name": "impressionsUnique",
+              "value": "={{ $json.impressionsUnique }}",
+              "type": "number"
+            },
+            {
+              "id": "d7b02f8f-32a3-4ea4-85d7-8362f3ab0098",
+              "name": "replayCount",
+              "value": "={{ $json.replayCount }}",
+              "type": "number"
+            },
+            {
+              "id": "4f2a682c-1e97-493a-92c8-b06bed0535a8",
+              "name": "followersGained",
+              "value": "={{ $json.followersGained }}",
+              "type": "number"
+            },
+            {
+              "id": "2ea664fe-f295-41ce-9fd5-3e9a4492566a",
+              "name": "retentionGraph",
+              "value": "={{ $json.retentionGraph }}",
+              "type": "array"
+            },
+            {
+              "id": "4819b74e-9805-4714-8e11-040b6a6f2b79",
+              "name": "totalEngagements",
+              "value": "={{ $json.totalEngagements }}",
+              "type": "number"
+            },
+            {
+              "id": "08745754-5bef-4ea5-ad7d-22c6275e3c3e",
+              "name": "engagementRate",
+              "value": "={{ $json.engagementRate }}",
+              "type": "string"
+            },
+            {
+              "id": "93775e8d-5f7f-4ccb-8a35-ddce35215cb1",
+              "name": "avgWatchRatio",
+              "value": "={{ $json.avgWatchRatio }}",
+              "type": "string"
+            },
+            {
+              "id": "a1faf0f5-1e46-4f66-85f3-8603feb6b95e",
+              "name": "videoId",
+              "value": "={{ $('Lấy post').item.json.data[0].attachments.data[0].target.id }}",
+              "type": "string"
+            },
+            {
+              "id": "457b9116-935e-4dda-86d9-b3ba4314ebf3",
+              "name": "Title",
+              "value": "={{ $('If').item.json.attachments.data[0].title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        304
+      ],
+      "id": "90174e77-bd80-4ad4-a78b-d77f3eb98325",
+      "name": "Chuẩn hóa dữ liệu"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8",
+          "mode": "list",
+          "cachedResultName": "ATI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1314832622,
+          "mode": "list",
+          "cachedResultName": "Engagement",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hcFoYNhmJdizx5s2id8gl_iPz_74fp5cZYz0I1bAJH8/edit#gid=1314832622"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "avgWatchTimeSec": "={{ $json.avgWatchTimeSec }}",
+            "avgWatchRatio": "={{ $json.avgWatchRatio }}",
+            "engagementRate": "={{ $json.engagementRate }}",
+            "replayCount": "={{ $json.replayCount }}",
+            "totalEngagements": "={{ $json.totalEngagements }}",
+            "retentionGraph": "={{ $json.retentionGraph }}",
+            "socialGained": "={{ $json.followersGained }}",
+            "totalViews": "={{ $json.totalViews }}",
+            "title": "={{ $json.Title }}"
+          },
+          "matchingColumns": [
+            "title"
+          ],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "totalViews",
+              "displayName": "totalViews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "avgWatchTimeSec",
+              "displayName": "avgWatchTimeSec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "avgWatchRatio",
+              "displayName": "avgWatchRatio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "engagementRate",
+              "displayName": "engagementRate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "replayCount",
+              "displayName": "replayCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "totalEngagements",
+              "displayName": "totalEngagements",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "retentionGraph",
+              "displayName": "retentionGraph",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "socialGained",
+              "displayName": "socialGained",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        304
+      ],
+      "id": "33325534-a520-4506-b0a4-29cbfef7f4e3",
+      "name": "Cập nhật Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vOVL810O1YkyU621",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Facebook Graph API1": {
+      "main": [
+        [
+          {
+            "node": "Lấy dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy post": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Lấy dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Chuẩn hóa dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lấy post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chuẩn hóa dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "Cập nhật Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cập nhật Sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "cad889e7-4af4-4fa3-8880-65b46ce38a7c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a5687956cb943cbcc3e67d5d6cee59a837afe62cbf4045df2f8ef234d6001617"
+  },
+  "id": "XcpvxYHU1WdpgYxv",
+  "tags": []
+}
